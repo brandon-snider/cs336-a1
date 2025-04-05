@@ -3,12 +3,13 @@ from __future__ import annotations
 import os
 from typing import IO, Any, BinaryIO
 from collections.abc import Iterable
+import cs336_basics.train_bpe
 from jaxtyping import Float, Int
 
 import numpy.typing as npt
 import torch
+import cs336_basics
 from torch import Tensor
-
 
 
 def run_linear(
@@ -187,7 +188,7 @@ def run_rope(
     theta: float,
     max_seq_len: int,
     in_query_or_key: Float[Tensor, " ... sequence_length d_k"],
-    token_positions: Int[Tensor, " ... sequence_length"],
+    token_positions: Int[Tensor, " ... sequence_length"],,
 ) -> Float[Tensor, " ... sequence_length d_k"]:
     """
     Run RoPE for a given input tensor.
@@ -588,4 +589,4 @@ def run_train_bpe(
                 representing that <token1> was merged with <token2>.
                 Merges are ordered by order of creation.
     """
-    raise NotImplementedError
+    return cs336_basics.train_bpe.train_bpe(input_path, vocab_size, special_tokens)
