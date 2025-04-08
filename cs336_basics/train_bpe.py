@@ -1,3 +1,5 @@
+import os
+from typing import BinaryIO
 import regex as re
 import collections
 import multiprocessing as mp
@@ -10,14 +12,58 @@ PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s
 CHUNK_SIZE = 1024 * 1024  # 1MB chunks
 
 
-def pre_tokenize_chunk(chunk: str) -> dict[tuple[bytes], int]:
+def find_chunk_boundaries(file: BinaryIO, desired_num_chunks: int, split_special_token: bytes) -> list[int]:
+    """
+    Chunk the file into parts that can be counted independently.
+    May return fewer chunks if the boundaries end up overlapping.
+    """
+    assert isinstance(split_special_token, bytes), "Must represent special token as a bytestring"
+
+    # Get total file size in bytes
+    file.seek(0, os.SEEK_END)
+    file_size = file.tell()
+    file.seek(0)
+
+    chunk_size = file_size // desired_num_chunks
+
+    # Initial guesses for chunk boundary locations, uniformly spaced
+    chunk_boundaries = [
+        i * chunk_size for i in range(desired_num_chunks + 1)
+    ]  # Chunks start on previous index, don't include last index
+    chunk_boundaries[-1] = file_size
+
+    mini_chunk_size = 4096  # Read ahead by 4k bytes at a time
+
+    for bi in range(1, len(chunk_boundaries) - 1):
+        initial_position = chunk_boundaries[bi]
+        file.seek(initial_position)  # Start at boundary guess
+        while True:
+            mini_chunk = file.read(mini_chunk_size)  # Read a mini chunk
+            if mini_chunk == b"":  # If EOF, this boundary should be at the end of the file
+                chunk_boundaries[bi] = file_size
+                break
+            found_at = mini_chunk.find(split_special_token)  # Find the special token in the mini chunk
+            if found_at != -1:
+                chunk_boundaries[bi] = initial_position + found_at
+                break
+            initial_position += mini_chunk_size
+
+    # Make sure all boundaries are unique, but might be fewer than desired_num_chunks
+    return sorted(set(chunk_boundaries))
+
+
+def pre_tokenize_chunk(chunk: str, special_tokens: list[str]) -> dict[tuple[bytes], int]:
     """Process a chunk of text and return frequency dictionary"""
     freqs: dict[tuple[bytes], int] = {}
 
-    docs = chunk.split("<|endoftext|>")
+    if special_tokens:
+        pattern = "|".join(re.escape(tok) for tok in special_tokens)
+        sub_chunks = re.split(pattern, chunk)
+    else:
+        sub_chunks = [chunk]
 
-    for i, doc_text in enumerate(docs):
-        for match in re.finditer(PAT, doc_text):
+    for sub_chunk in sub_chunks:
+        for match in re.finditer(PAT, sub_chunk):
             match_bytes = tuple(bytes([b]) for b in match.group().encode("UTF-8"))
             freqs[match_bytes] = freqs.get(match_bytes, 0) + 1
 
@@ -32,27 +78,40 @@ def merge_freq_dicts(dict1: dict[tuple[bytes], int], dict2: dict[tuple[bytes], i
     return result
 
 
-def pre_tokenize(input_path: str) -> dict[tuple[bytes], int]:
-    """Get the initial coarse-grained frequencies using regex with multiprocessing"""
-
+def pre_tokenize(input_path: str, special_tokens: list[str]) -> dict[tuple[bytes], int]:
+    """Get the initial coarse-grained frequencies using regex with multiprocessing,
+    ensuring chunk boundaries align with '<|endoftext|>' tokens.
+    """
+    num_processes = mp.cpu_count()
+    pool = mp.Pool(processes=num_processes)
     chunk_freqs = []
-    pool = mp.Pool(processes=mp.cpu_count())
 
-    with open(input_path) as f:
-        while True:
-            chunk = f.read(CHUNK_SIZE)
-            if not chunk:
-                break
-            # Process each chunk immediately and store only the result
-            chunk_freqs.append(pool.apply_async(pre_tokenize_chunk, (chunk,)))
+    with open(input_path, "rb") as f:
+        # Find boundary offsets
+        boundaries = find_chunk_boundaries(f, num_processes, b"<|endoftext|>")
+
+        # For each boundary pair, read that chunk and decode to str
+        for start, end in zip(boundaries[:-1], boundaries[1:]):
+            # Seek to the start offset
+            f.seek(start)
+            chunk_bytes = f.read(end - start)
+            chunk_str = chunk_bytes.decode("utf-8", errors="ignore")
+
+            #  Distribute work to each worker process
+            chunk_freqs.append(
+                pool.apply_async(
+                    pre_tokenize_chunk,
+                    (chunk_str, special_tokens),
+                )
+            )
 
     pool.close()
     pool.join()
 
-    # Get results from async objects
     freq_dicts = [async_result.get() for async_result in chunk_freqs]
 
-    combined_freqs = reduce(merge_freq_dicts, freq_dicts)
+    # Combine results
+    combined_freqs = reduce(merge_freq_dicts, freq_dicts, {})
     return combined_freqs
 
 
@@ -149,25 +208,29 @@ def train_bpe(
     - vocab: dict[int,bytes]
     - merges: list[tuple[bytes,bytes]]
     """
+    train_start_time = time.time()
+
     initial_tokens = [token.encode("UTF-8") for token in special_tokens] + [bytes([i]) for i in range(256)]
     vocab = {i: token for i, token in enumerate(initial_tokens)}
     merges = []
 
     print("Pre-tokenize: start")
     start_time = time.time()
-    # Coarse-grained frequencies
-    # e.g. {(b'l', b'o',b 'w', b'e', b'r'): 12, (b'h', b'i',b'g', b'h'): 3, ...}
-    freqs = pre_tokenize(input_path)
+    # Coarse-grained token frequencies e.g. {(b'l', b'o', b'w'): 12, (b'h', b'i',b'g', b'h'): 3, ...}
+    freqs = pre_tokenize(input_path, special_tokens)
     print(f"Pre-tokenize: finished in {time.time() - start_time:.2f}s")
 
     print("Initial pair frequencies: start")
     start_time = time.time()
-    # Initial pair frequencies, e.g. {(b'a', b'b'): 2, (b'c, b'de'): 12, ...}
+    # Pair frequencies, e.g. {(b'a', b'b'): 2, (b'c, b'de'): 12, ...}
     pair_freqs, pairs_to_keys = get_pair_freqs(freqs)
     print(f"Initial pair frequencies: finished in {time.time() - start_time:.2f}s")
 
     n_initial_tokens = len(initial_tokens)
     n_merges = vocab_size - n_initial_tokens
+
+    print("Merge: start")
+    start_time = time.time()
 
     for i in range(n_initial_tokens, n_initial_tokens + n_merges):
         # If max. vocab size is larger than largest possible vocab for provided data
@@ -189,8 +252,13 @@ def train_bpe(
         merge(freqs, pair_freqs, pairs_to_keys, best_pair)
 
         # Print progress every 10 merges
-        if i > n_initial_tokens and (i - n_initial_tokens) % 100 == 0:
-            print(f"{i - n_initial_tokens}/{n_merges} merges completed (runtime: {time.time() - start_time:.2f}s)")
+        if (i > n_initial_tokens and (i - n_initial_tokens + 1) % 100 == 0) or i == n_initial_tokens + n_merges - 1:
+            print(
+                f"{i - n_initial_tokens + 1}/{n_merges} merges completed (merge runtime: {time.time() - start_time:.2f}s)"
+            )
+
+    print(f"Merges completed in {time.time() - start_time:.2f}s")
+    print(f"Training completed in {time.time() - train_start_time:.2f}s")
 
     # Optionally write merges and vocab
     if merges_outpath:
