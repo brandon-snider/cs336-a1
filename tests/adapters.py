@@ -4,6 +4,7 @@ import os
 from typing import IO, Any, BinaryIO
 from collections.abc import Iterable
 import cs336_basics
+import cs336_basics
 from jaxtyping import Float, Int
 
 import numpy.typing as npt
