@@ -367,3 +367,99 @@ $
   The FFN computations increasingly dominate as model size increases. The contribution from the LM head is significant (greater than the contribution from attention) at the smallest model size, and diminishes quickly as model size increases.
   
 + The total FLOPs required increases from $4,513,336,524,800$ to $149,522,795,724,800$. The FLOPs for all operations except the attention operation increase linearly in the length of the context window (by a factor of $2^4$, in this case). The FLOPs for the attention operation (both $Q^T K$ and $W V$, where $W$ represents the normalized attention weights) increase quadratically in the length of the context window (by a factor of $2^8$, in this case).
+
+= Training a Transformer LM
+
+== Problem (`learning_rate_tuning`): Tuning the learning rate (1 point)
+
+For learning rates of 1, 1e1, and 1e2, the loss decreases more quickly as the learning rate is increased (reaching ~23.0 with lr=1, and ~10^-23 with lr=100). With a learning rate of 1e3, the loss diverges, reaching ~10^18 by iteration 10, indicating too large a learning rate.
+
+== Problem (`adamwAccounting`): Resource accounting for AdamW (2 points)
+
++ We express the peak memory requirements in terms of:
+  $ V &= "vocab_size" \
+    N &= "num_layers" \
+    d &= d_"model" \
+    d_"ff" &= 4d \
+    h &= "num_heads" \
+    T &= "context_length" \
+    B &= "batch_size" $
+
+  *Parameters:*
+
+  Embeddings: $V times d $
+
+  Each of the $N$ transformer blocks:
+  - 2x RMSNorm: $2d$
+  - MHA: $W_"qkv" + W_"out" = [d times (3 times d)] + d^2 = 4d^2$: 
+  - FFN: $2 times 4d^2 = 8d^2$
+  - Total: $12d^2 + 2d$
+
+  Final RMSNorm: $d$
+  
+  LM head: $d times V$
+
+  Total parameter count: $P = (2 V d) + N(12d^2 + 2d) + d$
+  
+  Parameter memory:
+  $ "ParamMemory" = 4P "bytes" $
+
+  *Optimizer State*
+
+  Each parameter has a first moment and second moment, so:
+
+  $ "AdamMemory" = 2 times (4P) = 8P "bytes" $
+
+  *Gradient Memory*
+
+  We hold one float per parameter, so:
+
+  $ "GradMemory" = 4P "bytes" $
+
+  *Activation Memory*
+
+  Each transformer block:
+  - RMSNorm results: $2 times B times T times d $
+  - MHA:
+    - QKV projections: $3 times B times T times d$
+    - Attention scores ($Q^T K$): $B times h times T times T$
+    - Softmax over attention scores: $B times h times T times T$
+    - Weighted sum of values: $B times T times d$
+    - Output projection: $B times T times d$
+  - FFN:
+    - $W_1$ output: $B times T times 4d = 4 times B times T times d$
+    - SiTU activation: $B times T times 4d = 4 times B times T times d$
+    - $W_2$ output: $B times T times d$
+  - Total: $16 (B T d) + 2(B h T^2)$
+
+  Across all $N$ blocks: $N (16 B T d + 2 B h T^2)$
+
+  Final RMSNorm: $B times T times d$
+
+  Output embedding (TM head): $B times T times V$
+
+  Cross-entropy on logits: $B times T$
+
+  Total activation count: $A = N (16 B T d + 2 B h T^2) + (B T d) + (B T V) + (B T)$
+
+  $ "ActMemory" = 4A "bytes" $
+
+  *Final Peak Memory Expression*
+
+  $ "TotalMemory" &= "ParamMemory" + "AdamMemory" + "GradMemory" + "ActMemory" \
+    &= 4P + 8P + 4P + 4A \
+    &= 16P + 4A "bytes" \
+    &= 16[(2 V d) + N(12d^2 + 2d) + d] + 4[N (16 B T d + 2 B h T^2) + (B T d) + (B T V) + (B T)]
+  $
+
++ $"TotalMemory"(B) = 15,311,904,768B (B) + 26,168,601,600 "bytes" approx 26 "GB"$
+  
+  We require $"TotalMemory"(B) lt.eq 80 times 10^9 "bytes", B in ZZ$, so:
+  $ 15,311,904,768 (B) + 26,168,601,600 &lt.eq 80,000,000,000 \
+  => B &lt.eq 3 $
+
+  With 80 GB available, and storing every intermediate value for every layer in float32, our maximum batch size is 3.
+
++ \@TODO
+
++ \@TODO
