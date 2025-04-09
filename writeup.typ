@@ -42,14 +42,23 @@
 
 == Problem (`train_bpe_expts_owt`): BPE Training on OpenWebText (2 points)
 
-+ \@TODO
-+ \@TODO
++ Longest token: `b'\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82'
+` which decodes to `ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ`
+  
+  This makes sense. This repeated pattern is common when documents are double-encoded or improperly decoded, which is common in scraped web content. In fact, this exact byte sequence appear over 4,500 times in the OWT training set.
+  
++ The OpenWebText tokenizer achieves a greater compression ratio, but with the tradeoff of having a much larger vocabulary size that enables it to capture domain-specific patterns and web content artifacts. The TinyStories tokenizer specializes in clean, simple English, reflecting the characteristics of its clean training set in contrast to the civerse, noisy content from the broader internet.
 
 == Problem (`tokenizer_experiments`): Experiments with Tokenizers (4 points)
 
++ TinyStories tokenizer compression ratio (bytes/token): $4.01$
+  OpenWebText tokenizer compression ratio (bytes/token): $4.50$
+
++ OpenWebText sample, tokenized with TinyStories tokenizer: $3.40$
+  The compression ratio is significantly worse than the compression ratio that the same tokenizer achieves on a sample of data from the same distribution on which the tokenizer was trained. Specifically, the OpenWebText/TinyStories compression ratio is $~85%$ of the TinyStories/TinyStories compression ratio.
+
 + \@TODO
-+ \@TODO
-+ \@TODO
+
 + \@TODO
 
 = Transformer Language Model Architecture

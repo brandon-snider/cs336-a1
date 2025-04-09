@@ -12,13 +12,13 @@ if __name__ == "__main__":
     #     vocab_outpath="./out/ts-valid-vocab.txt",
     # )
 
-    (vocab, merges) = train_bpe(
-        input_path="./data/TinyStoriesV2-GPT4-train.txt",
-        vocab_size=10000,
-        special_tokens=["<|endoftext|>"],
-        merges_outpath="./out/ts-train-merges.txt",
-        vocab_outpath="./out/ts-train-vocab.txt",
-    )
+    # (vocab, merges) = train_bpe(
+    #     input_path="./data/TinyStoriesV2-GPT4-train.txt",
+    #     vocab_size=10000,
+    #     special_tokens=["<|endoftext|>"],
+    #     merges_outpath="./out/ts-train-merges.txt",
+    #     vocab_outpath="./out/ts-train-vocab.txt",
+    # )
 
     # (vocab, merges) = train_bpe(
     #     input_path="./data/owt_valid.txt",
@@ -28,13 +28,13 @@ if __name__ == "__main__":
     #     vocab_outpath="./out/owt-valid-vocab.txt",
     # )
 
-    # (vocab, merges) = train_bpe(
-    #     input_path="./data/owt_train.txt",
-    #     vocab_size=32000,
-    #     special_tokens=["<|endoftext|>"],
-    #     merges_outpath="./out/owt-train-merges.txt",
-    #     vocab_outpath="./out/owt-train-vocab.txt",
-    # )
+    (vocab, merges) = train_bpe(
+        input_path="./data/owt_train.txt",
+        vocab_size=32000,
+        special_tokens=["<|endoftext|>"],
+        merges_outpath="./out/owt-train-merges.txt",
+        vocab_outpath="./out/owt-train-vocab.txt",
+    )
 
     # (vocab, merges) = train_bpe(
     #     input_path=FIXTURES_PATH / "corpus.en",

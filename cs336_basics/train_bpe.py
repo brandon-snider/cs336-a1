@@ -1,4 +1,5 @@
 import os
+import heapq
 from typing import BinaryIO
 import regex as re
 import collections
@@ -7,53 +8,65 @@ import time
 import pickle
 from functools import reduce
 
-
+# Regex for coarse tokenization
 PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
-CHUNK_SIZE = 1024 * 1024  # 1MB chunks
+
+
+class ReverseLexOrderPair:
+    """
+    Encapsulates (bytes, bytes) so that in a min-heap, the "largest in normal lex order"
+    is treated as the smallest. Ensures that tie frequencies pop in reverse lex order.
+    """
+
+    def __init__(self, pair: tuple[bytes, bytes]):
+        self.pair = pair
+
+    def __lt__(self, other: "ReverseLexOrderPair") -> bool:
+        # Invert normal order: self < other if self is > other (so larger lex sorts first).
+        return self.pair > other.pair
+
+    def __eq__(self, other: "ReverseLexOrderPair") -> bool:
+        return self.pair == other.pair
 
 
 def find_chunk_boundaries(file: BinaryIO, desired_num_chunks: int, split_special_token: bytes) -> list[int]:
     """
-    Chunk the file into parts that can be counted independently.
-    May return fewer chunks if the boundaries end up overlapping.
+    Find chunk boundaries by reading forward from guessed positions
+    until split_special_token is found (or EOF). Ensures alignment.
     """
     assert isinstance(split_special_token, bytes), "Must represent special token as a bytestring"
 
-    # Get total file size in bytes
     file.seek(0, os.SEEK_END)
     file_size = file.tell()
     file.seek(0)
-
     chunk_size = file_size // desired_num_chunks
 
-    # Initial guesses for chunk boundary locations, uniformly spaced
-    chunk_boundaries = [
-        i * chunk_size for i in range(desired_num_chunks + 1)
-    ]  # Chunks start on previous index, don't include last index
+    # Initial boundary guesses (uniformly spaced); force last boundary at EOF
+    chunk_boundaries = [i * chunk_size for i in range(desired_num_chunks + 1)]
     chunk_boundaries[-1] = file_size
 
-    mini_chunk_size = 4096  # Read ahead by 4k bytes at a time
-
+    mini_chunk_size = 4096
     for bi in range(1, len(chunk_boundaries) - 1):
-        initial_position = chunk_boundaries[bi]
-        file.seek(initial_position)  # Start at boundary guess
+        pos = chunk_boundaries[bi]
+        file.seek(pos)
         while True:
-            mini_chunk = file.read(mini_chunk_size)  # Read a mini chunk
-            if mini_chunk == b"":  # If EOF, this boundary should be at the end of the file
+            mini_chunk = file.read(mini_chunk_size)
+            if not mini_chunk:
+                # If EOF is reached before finding split token
                 chunk_boundaries[bi] = file_size
                 break
-            found_at = mini_chunk.find(split_special_token)  # Find the special token in the mini chunk
+            found_at = mini_chunk.find(split_special_token)
             if found_at != -1:
-                chunk_boundaries[bi] = initial_position + found_at
+                # Found the split token; adjust boundary precisely
+                chunk_boundaries[bi] = pos + found_at
                 break
-            initial_position += mini_chunk_size
+            pos += mini_chunk_size
 
-    # Make sure all boundaries are unique, but might be fewer than desired_num_chunks
     return sorted(set(chunk_boundaries))
 
 
 def pre_tokenize_chunk(chunk: str, special_tokens: list[str]) -> dict[tuple[bytes], int]:
-    """Process a chunk of text and return frequency dictionary"""
+    """Regex tokenizes the chunk. Splits first on special tokens, then uses PAT."""
     freqs: dict[tuple[bytes], int] = {}
 
     if special_tokens:
@@ -64,6 +77,7 @@ def pre_tokenize_chunk(chunk: str, special_tokens: list[str]) -> dict[tuple[byte
 
     for sub_chunk in sub_chunks:
         for match in re.finditer(PAT, sub_chunk):
+            # Each character is stored as a single-byte tuple element
             match_bytes = tuple(bytes([b]) for b in match.group().encode("UTF-8"))
             freqs[match_bytes] = freqs.get(match_bytes, 0) + 1
 
@@ -71,7 +85,7 @@ def pre_tokenize_chunk(chunk: str, special_tokens: list[str]) -> dict[tuple[byte
 
 
 def merge_freq_dicts(dict1: dict[tuple[bytes], int], dict2: dict[tuple[bytes], int]) -> dict[tuple[bytes], int]:
-    """Merge two frequency dictionaries"""
+    """Adds frequencies from dict2 into dict1."""
     result = dict1.copy()
     for key, value in dict2.items():
         result[key] = result.get(key, 0) + value
@@ -79,38 +93,29 @@ def merge_freq_dicts(dict1: dict[tuple[bytes], int], dict2: dict[tuple[bytes], i
 
 
 def pre_tokenize(input_path: str, special_tokens: list[str]) -> dict[tuple[bytes], int]:
-    """Get the initial coarse-grained frequencies using regex with multiprocessing,
-    ensuring chunk boundaries align with '<|endoftext|>' tokens.
+    """
+    Splits a file into chunks aligned with <|endoftext|>, then tokenizes each chunk
+    in parallel. Returns aggregated frequency dict.
     """
     num_processes = mp.cpu_count()
     pool = mp.Pool(processes=num_processes)
     chunk_freqs = []
 
     with open(input_path, "rb") as f:
-        # Find boundary offsets
         boundaries = find_chunk_boundaries(f, num_processes, b"<|endoftext|>")
 
-        # For each boundary pair, read that chunk and decode to str
+        # Read each chunk in bytes, decode, then apply_async for parallel tokenization
         for start, end in zip(boundaries[:-1], boundaries[1:]):
-            # Seek to the start offset
             f.seek(start)
             chunk_bytes = f.read(end - start)
             chunk_str = chunk_bytes.decode("utf-8", errors="ignore")
-
-            #  Distribute work to each worker process
-            chunk_freqs.append(
-                pool.apply_async(
-                    pre_tokenize_chunk,
-                    (chunk_str, special_tokens),
-                )
-            )
+            chunk_freqs.append(pool.apply_async(pre_tokenize_chunk, (chunk_str, special_tokens)))
 
     pool.close()
     pool.join()
 
-    freq_dicts = [async_result.get() for async_result in chunk_freqs]
-
-    # Combine results
+    # Collect and merge partial results
+    freq_dicts = [res.get() for res in chunk_freqs]
     combined_freqs = reduce(merge_freq_dicts, freq_dicts, {})
     return combined_freqs
 
@@ -118,32 +123,35 @@ def pre_tokenize(input_path: str, special_tokens: list[str]) -> dict[tuple[bytes
 def get_pair_freqs(
     freqs: dict[tuple[bytes], int],
 ) -> tuple[dict[tuple[bytes, bytes], int], dict[tuple[bytes, bytes], set[tuple[bytes]]]]:
-    """Get the initial pair-frequency table from the coarse-grained frequencies table"""
+    """
+    Builds a pair-frequency table and reverse mapping (pair -> set of keys).
+    """
     pair_freqs: dict[tuple[bytes, bytes], int] = collections.defaultdict(int)
     pairs_to_keys: dict[tuple[bytes, bytes], set[tuple[bytes]]] = collections.defaultdict(set)
 
     for symbols, freq in freqs.items():
         for i in range(len(symbols) - 1):
-            pair_freqs[symbols[i], symbols[i + 1]] += freq
-            pairs_to_keys[symbols[i], symbols[i + 1]].add(symbols)
+            pair = (symbols[i], symbols[i + 1])
+            pair_freqs[pair] += freq
+            pairs_to_keys[pair].add(symbols)
 
     return pair_freqs, pairs_to_keys
 
 
 def build_new_repr(old_repr: tuple[bytes], pair: tuple[bytes, bytes]) -> tuple[bytes]:
+    """
+    Replaces every occurrence of pair=(x,y) in old_repr with the merged symbol x+y.
+    """
     new_symbols = []
     i = 0
     while i < len(old_repr):
-        # Merge the pair whenever we see it
         if i < len(old_repr) - 1 and old_repr[i] == pair[0] and old_repr[i + 1] == pair[1]:
-            new_symbols.append(old_repr[i] + old_repr[i + 1])  # b'A' + b'B' => b'AB'
+            new_symbols.append(old_repr[i] + old_repr[i + 1])  # merges, e.g. b'A' + b'B' => b'AB'
             i += 2
         else:
             new_symbols.append(old_repr[i])
             i += 1
-
-    new_repr = tuple(new_symbols)
-    return new_repr
+    return tuple(new_symbols)
 
 
 def merge(
@@ -151,79 +159,88 @@ def merge(
     pair_freqs: dict[tuple[bytes, bytes], int],
     pairs_to_keys: dict[tuple[bytes, bytes], set[tuple[bytes]]],
     pair: tuple[bytes, bytes],
-) -> None:
-    """Merge a pair in the coarse-grained token frequency table, and
-    synchronize pair_freqs and pairs_to_keys for pairs affected by the merge."""
+) -> set[tuple[bytes, bytes]]:
+    """
+    Merges 'pair' into freqs and updates pair_freqs & pairs_to_keys for all
+    affected old/new keys.
+    """
+    changed_pairs = set()
     keys_to_modify = pairs_to_keys[pair].copy()
 
     for old_key in keys_to_modify:
         old_freq = freqs.pop(old_key)
         new_key = build_new_repr(old_key, pair)
 
-        # 1. Decrement pair_freqs for existing adjacencies in old_key
+        # Decrement frequencies in pair_freqs for old_key's adjacencies
         for i in range(len(old_key) - 1):
             left, right = old_key[i], old_key[i + 1]
             pair_freqs[left, right] -= old_freq
+            changed_pairs.add((left, right))
             if pair_freqs[left, right] <= 0:
                 del pair_freqs[left, right]
             pairs_to_keys[left, right].discard(old_key)
 
-        # 3. Increment pair_freqs for new_key's adjacencies
+        # Increment frequencies for new_key's adjacencies
         for i in range(len(new_key) - 1):
             left, right = new_key[i], new_key[i + 1]
             pair_freqs[left, right] += old_freq
+            changed_pairs.add((left, right))
             pairs_to_keys[left, right].add(new_key)
 
-        # 4. Put the new_key back into freqs
+        # Put new_key back with updated freq
         freqs[new_key] = freqs.get(new_key, 0) + old_freq
 
     pairs_to_keys[pair] = set()
+    return changed_pairs
 
 
 def write_merges(merges, outpath):
-    """Write merges directly to a binary file using pickle"""
+    """Pickle the merges list to a binary file."""
     with open(outpath, "wb") as f:
         pickle.dump(merges, f)
-
     print(f"Saved {len(merges)} merges to {outpath}")
 
 
 def write_vocab(vocab, outpath):
-    """Write vocab directly to a binary file using pickle"""
-    import pickle
-
+    """Pickle the vocab dict to a binary file."""
     with open(outpath, "wb") as f:
         pickle.dump(vocab, f)
-
     print(f"Saved vocabulary with {len(vocab)} tokens to {outpath}")
 
 
 def train_bpe(
-    input_path: str, vocab_size: int, special_tokens: list[str], merges_outpath: str = None, vocab_outpath: str = None
+    input_path: str,
+    vocab_size: int,
+    special_tokens: list[str],
+    merges_outpath: str = None,
+    vocab_outpath: str = None,
 ) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
-    """Trains a byte-level BPE tokenizer with the specified vocab_size on the
-    text in the file at input_path.
-
-    Returns:
-    - vocab: dict[int,bytes]
-    - merges: list[tuple[bytes,bytes]]
+    """
+    Trains byte-level BPE on a text file, returning:
+      - vocab: dict[int, bytes]
+      - merges: list of merged pairs
     """
     train_start_time = time.time()
 
-    initial_tokens = [token.encode("UTF-8") for token in special_tokens] + [bytes([i]) for i in range(256)]
+    # Initialize special tokens and single-byte tokens
+    initial_tokens = [tok.encode("UTF-8") for tok in special_tokens] + [bytes([i]) for i in range(256)]
     vocab = {i: token for i, token in enumerate(initial_tokens)}
     merges = []
 
     print("Pre-tokenize: start")
     start_time = time.time()
-    # Coarse-grained token frequencies e.g. {(b'l', b'o', b'w'): 12, (b'h', b'i',b'g', b'h'): 3, ...}
     freqs = pre_tokenize(input_path, special_tokens)
     print(f"Pre-tokenize: finished in {time.time() - start_time:.2f}s")
 
     print("Initial pair frequencies: start")
     start_time = time.time()
-    # Pair frequencies, e.g. {(b'a', b'b'): 2, (b'c, b'de'): 12, ...}
     pair_freqs, pairs_to_keys = get_pair_freqs(freqs)
+
+    # Build a max-heap by pushing negative frequencies
+    pair_heap = []
+    for p, f in pair_freqs.items():
+        if f > 0:
+            heapq.heappush(pair_heap, (-f, ReverseLexOrderPair(p), p))
     print(f"Initial pair frequencies: finished in {time.time() - start_time:.2f}s")
 
     n_initial_tokens = len(initial_tokens)
@@ -233,26 +250,39 @@ def train_bpe(
     start_time = time.time()
 
     for i in range(n_initial_tokens, n_initial_tokens + n_merges):
-        # If max. vocab size is larger than largest possible vocab for provided data
-        if not pair_freqs:
+        if not pair_heap:
             break
 
-        # Most frequent pair, e.g. (b'a', b'be')
-        best_pair = max(pair_freqs, key=lambda x: (pair_freqs[x], x))
-
-        if pair_freqs[best_pair] <= 0:
-            # No more merges that improve anything
+        # Pop until we find the top pair that still matches pair_freqs
+        while pair_heap:
+            neg_freq, _, top_pair = heapq.heappop(pair_heap)
+            freq = -neg_freq
+            if pair_freqs.get(top_pair, 0) == freq:
+                pair = top_pair
+                break
+            if top_pair in pair_freqs and pair_freqs[top_pair] > 0:
+                heapq.heappush(pair_heap, (-pair_freqs[top_pair], ReverseLexOrderPair(top_pair), top_pair))
+        else:
+            # If pair_heap is empty after the loop, we are done
             break
 
-        # Create new vocab entry and note the merge
-        vocab[i] = best_pair[0] + best_pair[1]
-        merges.append(best_pair)
+        if pair_freqs.get(pair, 0) <= 0:
+            break
 
-        # Merge the pair in freqs, and update pair_freqs incrementally
-        merge(freqs, pair_freqs, pairs_to_keys, best_pair)
+        # Add this new merge token to vocab and record the merge
+        vocab[i] = pair[0] + pair[1]
+        merges.append(pair)
 
-        # Print progress every 10 merges
-        if (i > n_initial_tokens and (i - n_initial_tokens + 1) % 100 == 0) or i == n_initial_tokens + n_merges - 1:
+        # Merge in freqs, then update the heap for pairs changed by this merge
+        changed_pairs = merge(freqs, pair_freqs, pairs_to_keys, pair)
+        for cp in changed_pairs:
+            if cp in pair_freqs and pair_freqs[cp] > 0:
+                heapq.heappush(pair_heap, (-pair_freqs[cp], ReverseLexOrderPair(cp), cp))
+
+        # Print progress every 100 merges or at the last iteration
+        if ((i > n_initial_tokens) and ((i - n_initial_tokens + 1) % 100 == 0)) or (
+            i == n_initial_tokens + n_merges - 1
+        ):
             print(
                 f"{i - n_initial_tokens + 1}/{n_merges} merges completed (merge runtime: {time.time() - start_time:.2f}s)"
             )
@@ -260,10 +290,10 @@ def train_bpe(
     print(f"Merges completed in {time.time() - start_time:.2f}s")
     print(f"Training completed in {time.time() - train_start_time:.2f}s")
 
-    # Optionally write merges and vocab
+    # Optionally save merges and vocab
     if merges_outpath:
         write_merges(merges, merges_outpath)
     if vocab_outpath:
         write_vocab(vocab, vocab_outpath)
 
-    return (vocab, merges)
+    return vocab, merges
