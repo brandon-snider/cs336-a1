@@ -16,12 +16,15 @@ class Tokenizer:
         self.vocab_inv = {v: k for k, v in vocab.items()}
         self.merges = merges
         self.merges_dict = {merge: i for i, merge in enumerate(merges)}
+        self.encode_cache = {}
+        self.cache_hits = 0
 
-        # Sort special tokens by length in descending order to prioritize longer matches
-        self.special_tokens = sorted(special_tokens, key=len, reverse=True) if special_tokens else None
+        self.pretokenize_pattern = re.compile(train_bpe.PAT)
 
-        # Add special tokens to vocab and vocab_inv with unique token ids
         if special_tokens:
+            self.special_tokens = sorted(special_tokens, key=len, reverse=True)
+            self.special_pattern = "(" + "|".join(re.escape(k) for k in self.special_tokens) + ")"
+
             next_id = max(self.vocab.keys()) + 1
             for token in special_tokens:
                 token_bytes = token.encode("UTF-8")
@@ -29,6 +32,9 @@ class Tokenizer:
                     self.vocab[next_id] = token_bytes
                     self.vocab_inv[token_bytes] = next_id
                     next_id += 1
+        else:
+            self.special_tokens = None
+            self.special_pattern = None
 
     @classmethod
     def from_files(cls, vocab_filepath: str, merges_filepath: str, special_tokens: list[str] | None = None):
@@ -49,8 +55,7 @@ class Tokenizer:
             return self._encode_chunk(text)
 
         # If we have special tokens, split on them, keeping delimiters
-        special_pattern = "(" + "|".join(re.escape(k) for k in self.special_tokens) + ")"
-        special_chunks = re.split(special_pattern, text)
+        special_chunks = re.split(self.special_pattern, text)
 
         ids = []
         for part in special_chunks:
@@ -64,17 +69,26 @@ class Tokenizer:
 
     def _encode_chunk(self, text: str) -> list[int]:
         """Encodes an input text chunk into a sequence of token IDs."""
-        pretokens, pretoken_reprs = self._pretokenize(text)
+        pretokens = self._pretokenize(text)
+        pretoken_reprs: dict[str, list[bytes]] = {}
+
+        ids = []
 
         # Merge each pretoken using the BPE rules, in ascending rank order
         for p in pretokens:
-            pretoken_reprs[p] = self._merge_subword(pretoken_reprs[p])
+            if p in self.encode_cache:
+                ids.extend(self.encode_cache[p])
+                self.cache_hits += 1
+            else:
+                # Each character → single bytes: e.g. "abc" -> [b'a', b'b', b'c']
+                if p not in pretoken_reprs:
+                    match_bytes = list(bytes([b]) for b in p.encode("UTF-8"))
+                    pretoken_reprs[p] = match_bytes
 
-        # Convert each final subword to its ID
-        ids = []
-        for p in pretokens:
-            for subword in pretoken_reprs[p]:
-                ids.append(self.vocab_inv[subword])
+                merged = self._merge_subword(pretoken_reprs[p])
+                token_ids = [self.vocab_inv[subword] for subword in merged]
+                self.encode_cache[p] = token_ids
+                ids.extend(token_ids)
 
         return ids
 
@@ -104,7 +118,7 @@ class Tokenizer:
             rep = rep[:best_idx] + [merged] + rep[best_idx + 2 :]
 
     def encode_iterable(self, iterable: Iterable[str]) -> Iterator[int]:
-        """Yields token IDs lazile from an iterable of strings (e.g., a file handle)."""
+        """Yields token IDs lazily from an iterable of strings (e.g., a file handle)."""
         for text in iterable:
             yield from self.encode(text)
 
@@ -113,18 +127,12 @@ class Tokenizer:
         text = b"".join(self.vocab[id] for id in ids)
         return text.decode("UTF-8", errors="replace")
 
-    def _pretokenize(self, text: str) -> tuple[list[str], dict[str, list[bytes]]]:
+    def _pretokenize(self, text: str) -> list[str]:
         """Splits text into 'pretokens' and builds an initial byte representation for each."""
         pretokens: list[str] = []
-        pretoken_reprs: dict[str, list[bytes]] = {}
 
-        for match in re.finditer(train_bpe.PAT, text):
+        for match in self.pretokenize_pattern.finditer(text):
             match_str = match.group()
             pretokens.append(match_str)
 
-            # Each character → single bytes: e.g. "abc" -> [b'a', b'b', b'c']
-            if match_str not in pretoken_reprs:
-                match_bytes = list(bytes([b]) for b in match_str.encode("UTF-8"))
-                pretoken_reprs[match_str] = match_bytes
-
-        return pretokens, pretoken_reprs
+        return pretokens

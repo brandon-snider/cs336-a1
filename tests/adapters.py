@@ -21,6 +21,7 @@ import cs336_basics.rope
 import cs336_basics.softmax
 import cs336_basics.swiglu
 import cs336_basics.transformer
+import cs336_basics.train_bpe_cached
 
 
 def _merge_attention_weights(weights: dict[str, Tensor]) -> dict[str, Tensor]:
@@ -660,4 +661,5 @@ def run_train_bpe(
                 representing that <token1> was merged with <token2>.
                 Merges are ordered by order of creation.
     """
-    return cs336_basics.train_bpe.train_bpe(input_path, vocab_size, special_tokens)
+    # return cs336_basics.train_bpe.train_bpe(input_path, vocab_size, special_tokens)
+    return cs336_basics.train_bpe_cached.train_bpe_cached(input_path, vocab_size, special_tokens)

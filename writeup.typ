@@ -57,9 +57,11 @@
 + OpenWebText sample, tokenized with TinyStories tokenizer: $3.40$
   The compression ratio is significantly worse than the compression ratio that the same tokenizer achieves on a sample of data from the same distribution on which the tokenizer was trained. Specifically, the OpenWebText/TinyStories compression ratio is $~85%$ of the TinyStories/TinyStories compression ratio.
 
-+ \@TODO
++ $"Throughput" approx 6.8 times 10^6 "bytes/second" = 6.8 "MB/second"$
 
-+ \@TODO
+  $T_"Pile" approx (825 times 10^9) "/" (6.8 times 10^6) = 121,324 "seconds" approx 33.7 "hours"$
+
++ `uint16` is appropriate because of our vocabulary sizes. Both vocabulary sizes are $> 2^8$ and $< 2^16$. This means we can't use an 8-bit representation (we'd have token IDs greater than the representation can store) and we don't need more than a 16-bit representation (all token IDs can be expressed in a 16-bit representation). `uint16` is therefore the most memory-efficient choice.
 
 = Transformer Language Model Architecture
 
