@@ -1,7 +1,7 @@
 import math
 
 
-def lr_cosing_schedule(it: int, lr_max: float, lr_min: float, warmup_iters: int, cosine_cycle_iters: int):
+def lr_cosine_schedule(it: int, lr_max: float, lr_min: float, warmup_iters: int, cosine_cycle_iters: int):
     if it < warmup_iters:
         return (it / warmup_iters) * lr_max
 

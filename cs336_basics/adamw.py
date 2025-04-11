@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from cs336_basics.lr_cosine_schedule import lr_cosine_schedule
 import torch
 import math
 
@@ -14,6 +15,11 @@ class AdamW(torch.optim.Optimizer):
     ):
         defaults = {"lr": lr, "betas": betas, "eps": eps, "weight_decay": weight_decay}
         super().__init__(params, defaults)
+
+        self.lr = lr
+        self.betas = betas
+        self.eps = eps
+        self.weight_decay = weight_decay
 
     def step(self, closure: Callable | None = None):
         loss = None if closure is None else closure()
