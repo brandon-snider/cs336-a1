@@ -69,12 +69,15 @@ def tokenize(vocab_path, merges_path, data_path, output_path):
 if __name__ == "__main__":
     BASE_PATH = pathlib.Path(__file__).resolve().parent / ".."
 
-    # vocab_path, merges_path = BASE_PATH / "out/ts-train-vocab.txt", BASE_PATH / "out/ts-train-merges.txt"
+    # vocab_path, merges_path = BASE_PATH / "out/tokenizers/ts-train/vocab.txt", BASE_PATH / "out/tokenizers/ts-train/merges.txt"
     # data_path = BASE_PATH / "data/TinyStoriesV2-GPT4-train.txt"
-    # output_path = BASE_PATH / "out/ts-train-tokens.bin"
+    # output_path = BASE_PATH / "out/tokens/ts-train/tokens.bin"
 
-    vocab_path, merges_path = BASE_PATH / "out/owt-train-vocab.txt", BASE_PATH / "out/owt-train-merges.txt"
+    vocab_path, merges_path = (
+        BASE_PATH / "out/tokenizers/owt-train/vocab.txt",
+        BASE_PATH / "out/tokenizers/owt-train/merges.txt",
+    )
     data_path = BASE_PATH / "data/owt_train.txt"
-    output_path = BASE_PATH / "out/owt-train-tokens.bin"
+    output_path = BASE_PATH / "out/tokens/owt-train/tokens.bin"
 
     tokenize(vocab_path, merges_path, data_path, output_path)

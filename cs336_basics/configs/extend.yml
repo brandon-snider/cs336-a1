@@ -1,0 +1,6 @@
+training:
+  batch_size: 32
+  max_steps: 100
+  eval_interval: 10
+  eval_steps: 10
+  eval_batch_size: 32

@@ -2,10 +2,10 @@ from cs336_basics.tokenizer import Tokenizer
 import pathlib
 
 if __name__ == "__main__":
-    OUTPATH = (pathlib.Path(__file__).resolve().parent) / ".." / "out"
     prefix = "ts-train"
-    vocab_filepath = OUTPATH / f"{prefix}-vocab.txt"
-    merges_filepath = OUTPATH / f"{prefix}-merges.txt"
+    OUTPATH = (pathlib.Path(__file__).resolve().parent) / ".." / "out" / "tokenizers" / prefix
+    vocab_filepath = OUTPATH / "vocab.txt"
+    merges_filepath = OUTPATH / "merges.txt"
     # special_tokens = ["<|endoftext|>"]
 
     tokenizer = Tokenizer.from_files(vocab_filepath, merges_filepath, ["<|endoftext|>"])

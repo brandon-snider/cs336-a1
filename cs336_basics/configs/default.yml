@@ -1,0 +1,45 @@
+# - Run training with `python -m cs336_basics.train --config default.yml`
+# - Run from project root (paths are relative to `cwd`)
+# - Will always eval and save checkpoint at the end of training
+
+run:
+  run_id: "run-<timestamp>"
+  out_dir: "./out/runs"
+  # wandb_project: false
+  # wandb_tags: []
+  wandb_project: "cs336-a1"
+  wandb_tags: ["lr-sweep"]
+
+data:
+  train_data_path: "./out/tokens/ts-train/tokens.bin"
+  valid_data_path: "./out/tokens/ts-valid/tokens.bin"
+
+model:
+  d_model: 512
+  num_heads: 16
+  d_ff: 1344
+  vocab_size: 10_000
+  context_length: 256
+  num_layers: 4
+  rope_theta: 10_000
+
+optimizer:
+  lr: 0.001
+  betas: [0.9, 0.999]
+  eps: 1.0e-8
+  weight_decay: 0.01
+
+# (batch_size * max_steps * context_length) ~= 327,680,000 (327.68M)
+# e.g. 64 * 20_000 * 256 = 327,680,000
+training:
+  batch_size: 8
+  max_steps: 1
+  eval_before_training: false
+  eval_interval: 1_000
+  eval_steps: 1
+  eval_batch_size: 8
+  checkpoint_interval: 1_000
+  max_l2_norm: 1.0
+  lr_max: 0.001
+  lr_min: 0.0001
+  warmup_ratio: 0.05
