@@ -22,6 +22,8 @@ def tokenize(vocab_path, merges_path, data_path, output_path):
     print(f"Approximately {approx_total_tokens:,} tokens in the dataset")
     print("-" * 100)
 
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
     # Create a memory-mapped array (binary file, slightly over-allocated, token count is approximate)
     mm = np.memmap(
         output_path,
@@ -69,15 +71,20 @@ def tokenize(vocab_path, merges_path, data_path, output_path):
 if __name__ == "__main__":
     BASE_PATH = pathlib.Path(__file__).resolve().parent / ".."
 
-    # vocab_path, merges_path = BASE_PATH / "out/tokenizers/ts-train/vocab.txt", BASE_PATH / "out/tokenizers/ts-train/merges.txt"
-    # data_path = BASE_PATH / "data/TinyStoriesV2-GPT4-train.txt"
-    # output_path = BASE_PATH / "out/tokens/ts-train/tokens.bin"
-
     vocab_path, merges_path = (
-        BASE_PATH / "out/tokenizers/owt-train/vocab.txt",
-        BASE_PATH / "out/tokenizers/owt-train/merges.txt",
+        BASE_PATH / "out/tokenizers/ts-train/vocab.txt",
+        BASE_PATH / "out/tokenizers/ts-train/merges.txt",
     )
-    data_path = BASE_PATH / "data/owt_train.txt"
-    output_path = BASE_PATH / "out/tokens/owt-train/tokens.bin"
+    data_path = "/data/a1-basics/TinyStoriesV2-GPT4-train.txt"
+    # data_path = BASE_PATH / "data/TinyStoriesV2-GPT4-train.txt"
+    output_path = BASE_PATH / "out/tokens/ts-train/tokens.bin"
+
+    # vocab_path, merges_path = (
+    #     BASE_PATH / "out/tokenizers/owt-train/vocab.txt",
+    #     BASE_PATH / "out/tokenizers/owt-train/merges.txt",
+    # )
+    # data_path = "/data/a1-basics/owt_train.txt"
+    # data_path = BASE_PATH / "data/owt_train.txt"
+    # output_path = BASE_PATH / "out/tokens/owt-train/tokens.bin"
 
     tokenize(vocab_path, merges_path, data_path, output_path)

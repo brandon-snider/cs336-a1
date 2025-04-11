@@ -191,6 +191,7 @@ def merge(
 
 def write_merges(merges, outpath):
     """Pickle the merges list to a binary file."""
+    os.makedirs(os.path.dirname(outpath), exist_ok=True)
     with open(outpath, "wb") as f:
         pickle.dump(merges, f)
     print(f"Saved {len(merges)} merges to {outpath}")
@@ -198,6 +199,7 @@ def write_merges(merges, outpath):
 
 def write_vocab(vocab, outpath):
     """Pickle the vocab dict to a binary file."""
+    os.makedirs(os.path.dirname(outpath), exist_ok=True)
     with open(outpath, "wb") as f:
         pickle.dump(vocab, f)
     print(f"Saved vocabulary with {len(vocab)} tokens to {outpath}")

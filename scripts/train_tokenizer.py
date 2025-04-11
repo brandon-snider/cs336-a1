@@ -7,6 +7,7 @@ FIXTURES_PATH = (pathlib.Path(__file__).resolve().parent) / ".." / "tests" / "fi
 
 if __name__ == "__main__":
     # (vocab, merges) = train_bpe(
+    #     input_path="/data/a1-basics/TinyStoriesV2-GPT4-valid.txt",
     #     input_path="./data/TinyStoriesV2-GPT4-valid.txt",
     #     vocab_size=10000,
     #     special_tokens=["<|endoftext|>"],
@@ -15,7 +16,8 @@ if __name__ == "__main__":
     # )
 
     (vocab, merges) = train_bpe(
-        input_path="./data/TinyStoriesV2-GPT4-train.txt",
+        input_path="/data/a1-basics/TinyStoriesV2-GPT4-train.txt",
+        # input_path="./data/TinyStoriesV2-GPT4-train.txt",
         vocab_size=10000,
         special_tokens=["<|endoftext|>"],
         merges_outpath="./out/tokenizers/ts-train/merges.txt",
@@ -23,6 +25,7 @@ if __name__ == "__main__":
     )
 
     # (vocab, merges) = train_bpe(
+    #     input_path="/data/a1-basics/owt_valid.txt",
     #     input_path="./data/owt_valid.txt",
     #     vocab_size=32000,
     #     special_tokens=["<|endoftext|>"],
@@ -31,6 +34,7 @@ if __name__ == "__main__":
     # )
 
     # (vocab, merges) = train_bpe(
+    #     input_path="/data/a1-basics/owt_train.txt",
     #     input_path="./data/owt_train.txt",
     #     vocab_size=32000,
     #     special_tokens=["<|endoftext|>"],

@@ -4,15 +4,18 @@
 
 run:
   run_id: "run-<timestamp>"
-  out_dir: "./out/runs"
-  # wandb_project: false
+  # out_dir: "./out/runs"
+  out_dir: "/data/c-sniderb/runs"
+  wandb_project: false
   # wandb_tags: []
   wandb_project: "cs336-a1"
   wandb_tags: ["lr-sweep"]
 
 data:
-  train_data_path: "./out/tokens/ts-train/tokens.bin"
-  valid_data_path: "./out/tokens/ts-valid/tokens.bin"
+  # train_data_path: "./out/tokens/ts-train/tokens.bin"
+  # valid_data_path: "./out/tokens/ts-valid/tokens.bin"
+  train_data_path: "/data/c-sniderb/tokens/ts-train/tokens.bin"
+  valid_data_path: "/data/c-sniderb/tokens/ts-valid/tokens.bin"
 
 model:
   d_model: 512
@@ -32,13 +35,13 @@ optimizer:
 # (batch_size * max_steps * context_length) ~= 327,680,000 (327.68M)
 # e.g. 64 * 20_000 * 256 = 327,680,000
 training:
-  batch_size: 8
-  max_steps: 1
+  batch_size: 64
+  max_steps: 20_000
   eval_before_training: false
-  eval_interval: 1_000
-  eval_steps: 1
-  eval_batch_size: 8
-  checkpoint_interval: 1_000
+  eval_interval: 1000
+  eval_steps: 50
+  eval_batch_size: 64
+  checkpoint_interval: 20_000
   max_l2_norm: 1.0
   lr_max: 0.001
   lr_min: 0.0001

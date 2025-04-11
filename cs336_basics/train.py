@@ -191,6 +191,7 @@ def train(config: Config | None = None):
     use_compile = True
     if use_compile and device != "mps":
         model = torch.compile(model)
+        torch.set_float32_matmul_precision("high")
     elif use_compile and device == "mps":
         model = torch.compile(model, backend="aot_eager")
 
@@ -210,7 +211,8 @@ def train(config: Config | None = None):
             val_loss = 0.0
             for _ in range(config.training.eval_steps):
                 x, y = get_batch(valid_data, config.training.eval_batch_size, config.model.context_length, device)
-                logits = model(x)
+                with torch.autocast(device_type=device, dtype=dtype):
+                    logits = model(x)
                 loss = cross_entropy_loss(logits, y)
                 val_loss += loss.item()
             val_loss /= config.training.eval_steps
@@ -249,7 +251,8 @@ def train(config: Config | None = None):
 
         x, y = get_batch(train_data, batch_size, config.model.context_length, device)
 
-        logits = model(x)
+        with torch.autocast(device_type=device, dtype=dtype):
+            logits = model(x)
         loss = cross_entropy_loss(logits, y)
         loss.backward()
         norm = gradient_clip(model.parameters(), max_l2_norm)  # norm before clipping
