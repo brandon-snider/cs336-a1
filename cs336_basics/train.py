@@ -291,7 +291,9 @@ def train(config: Config | None = None):
             "tok/sec": f"{int(tokens_per_sec):,}",
         }
 
-        logger.log_info(display_metrics)
+        if step == 1 or step % 10 == 0 or is_last_step:
+            logger.log_info(display_metrics)
+
         logger.log_metrics(metrics)
 
         if step % eval_interval == 0 or is_last_step:

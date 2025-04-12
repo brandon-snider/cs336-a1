@@ -1,0 +1,15 @@
+run:
+  wandb_tags: ["batch-size-variations"]
+
+optimizer:
+  lr: 8.0e-3
+
+training:
+  batch_size: 1024
+  max_steps: 1250
+  eval_interval: 10_000_000
+  eval_steps: 1
+  eval_batch_size: 1024
+  checkpoint_interval: 1250
+  lr_max: 8.0e-3
+  warmup_ratio: 0.05 
