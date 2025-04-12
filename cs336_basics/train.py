@@ -331,25 +331,72 @@ def get_progress_str(step, max_steps):
     return f"step {step}/{max_steps} ({step / max_steps * 100:.2f}%)"
 
 
+def parse_value(value_str: str):
+    """Convert arg to list, int, float, bool, or leave as string."""
+    if value_str.strip().startswith("[") and value_str.strip().endswith("]"):
+        content = value_str.strip()[1:-1].strip()
+        return [parse_value(v.strip()) for v in content.split(",")] if content else []
+
+    try:
+        return int(value_str)
+    except ValueError:
+        pass
+
+    try:
+        return float(value_str)
+    except ValueError:
+        pass
+
+    lower = value_str.strip().lower()
+    if lower in ("true", "false"):
+        return lower == "true"
+
+    return value_str
+
+
+def deep_set(config_dict, key_path: str, value):
+    """Deeply set dot-separated key in a config dictionary"""
+    keys = key_path.split(".")
+    d = config_dict
+    for k in keys[:-1]:
+        if k not in d or not isinstance(d[k], dict):
+            d[k] = {}
+        d = d[k]
+    d[keys[-1]] = value
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a transformer model")
     parser.add_argument("--config", type=str, help="Path to config file (optional)")
     parser.add_argument("--resume-from", type=str, help="Path to run directory to resume from")
     parser.add_argument("--override-config", type=str, help="Path to config file with values to override when resuming")
+    parser.add_argument(
+        "--override-param",
+        action="append",
+        default=[],
+        help="Override a config param, e.g. model.d_model=512 (can be repeated)",
+    )
     args = parser.parse_args()
 
     if args.resume_from:
         # Load config from the previous run
         resume_config_path = os.path.join(args.resume_from, "config.json")
         base_config = load_config_from_file(resume_config_path)
-
-        # Set resumption parameters
         base_config["training"]["resume"] = True
         base_config["training"]["resume_checkpoint"] = os.path.join(args.resume_from, "checkpoints/latest.pt")
 
         # Use the override config if provided, or None otherwise
         config = load_config(args.override_config, base_config=base_config)
     else:
-        config = load_config(args.config)  # Will use default if args.config is None
+        # Will use default if args.config is None
+        config = load_config(args.config)
+
+    for override_str in args.override_param:
+        if "=" not in override_str:
+            raise ValueError(f"Invalid override: {override_str}, must be like key=val")
+
+        key, raw_value = override_str.split("=", 1)
+        value = parse_value(raw_value)
+        deep_set(config, key, value)
 
     train(config)

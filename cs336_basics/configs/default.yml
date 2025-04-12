@@ -6,10 +6,9 @@ run:
   run_id: "run-<timestamp>"
   # out_dir: "./out/runs"
   out_dir: "/data/c-sniderb/runs"
-  wandb_project: false
-  # wandb_tags: []
   wandb_project: "cs336-a1"
-  wandb_tags: ["lr-sweep"]
+  # wandb_project: false
+  wandb_tags: []
 
 data:
   # train_data_path: "./out/tokens/ts-train/tokens.bin"
@@ -27,22 +26,24 @@ model:
   rope_theta: 10_000
 
 optimizer:
-  lr: 0.001
+  lr: 1.0e-3
   betas: [0.9, 0.999]
   eps: 1.0e-8
   weight_decay: 0.01
 
 # (batch_size * max_steps * context_length) ~= 327,680,000 (327.68M)
+# e.g. 32 * 40_000 * 256 = 327,680,000
 # e.g. 64 * 20_000 * 256 = 327,680,000
+# e.g. 128 * 10_000 * 256 = 327,680,000
 training:
-  batch_size: 64
-  max_steps: 20_000
+  batch_size: 128
+  max_steps: 10_000
   eval_before_training: false
   eval_interval: 1000
   eval_steps: 50
-  eval_batch_size: 64
+  eval_batch_size: 128
   checkpoint_interval: 20_000
   max_l2_norm: 1.0
-  lr_max: 0.001
-  lr_min: 0.0001
+  lr_max: 1.0e-3
+  lr_min: 0
   warmup_ratio: 0.05
