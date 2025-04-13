@@ -23,7 +23,7 @@ class Block(torch.nn.Module):
         self.rope = rope
 
         self.ln1 = RMSNorm(d_model, device=device, dtype=dtype)
-        self.attn = CausalMultiHeadSelfAttention(d_model, num_heads, device, dtype)
+        self.attn = CausalMultiHeadSelfAttention(d_model, num_heads, device, dtype, **kwargs)
 
         self.ln2 = RMSNorm(d_model, device=device, dtype=dtype)
 
