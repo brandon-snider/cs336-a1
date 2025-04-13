@@ -2,7 +2,8 @@ import torch
 from cs336_basics.rope import RotaryPositionalEmbedding
 from cs336_basics.embedding import Embedding
 from cs336_basics.linear import Linear
-from cs336_basics.rmsnorm import RMSNorm
+
+# from cs336_basics.rmsnorm import RMSNorm
 from cs336_basics.block import Block
 
 

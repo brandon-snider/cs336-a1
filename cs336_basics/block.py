@@ -1,6 +1,7 @@
 import torch
 from cs336_basics.cmha import CausalMultiHeadSelfAttention
-from cs336_basics.rmsnorm import RMSNorm
+
+# from cs336_basics.rmsnorm import RMSNorm
 from cs336_basics.swiglu import SwiGLU
 from cs336_basics.rope import RotaryPositionalEmbedding
 
