@@ -152,7 +152,7 @@ def run_scaled_dot_product_attention(
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
     # return cs336_basics.attention.scaled_dot_product_attention(Q, K, V, mask)
-    return cs336_basics.attention.chunked_attention(Q, K, V, chunk_size=128)
+    return cs336_basics.attention.scaled_dot_product_attention_chunked(Q, K, V, mask, chunk_size=2048)
 
 
 def run_multihead_self_attention(
