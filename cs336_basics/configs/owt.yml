@@ -1,0 +1,29 @@
+run:
+  wandb_tags: ["owt"]
+
+data:
+  train_data_path: "/data/c-sniderb/tokens/owt-train/tokens.bin"
+  valid_data_path: "/data/c-sniderb/tokens/owt-valid/tokens.bin"
+
+model:
+  context_length: 256
+  vocab_size: 32_000
+
+optimizer:
+  lr: 6.0e-3
+
+# (batch_size * max_steps * context_length) ~= 327,680,000 (327.68M)
+# e.g. 32 * 40_000 * 256 = 327,680,000
+# e.g. 64 * 20_000 * 256 = 327,680,000
+# e.g. 128 * 10_000 * 256 = 327,680,000
+training:
+  batch_size: 256
+  max_steps: 5_000
+  eval_interval: 500
+  eval_steps: 20
+  eval_batch_size: 256
+  checkpoint_interval: 1_250
+  # max_l2_norm: 1.0
+  lr_max: 6.0e-3
+  lr_min: 3.0e-4
+  warmup_ratio: 0.05

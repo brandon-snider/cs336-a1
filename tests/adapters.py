@@ -24,6 +24,7 @@ import cs336_basics.transformer
 import cs336_basics.train_bpe
 import cs336_basics.data_loader
 import cs336_basics.checkpointing
+import cs336_basics.silu
 
 
 def _merge_attention_weights(weights: dict[str, Tensor]) -> dict[str, Tensor]:
@@ -464,7 +465,7 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
         Float[Tensor,"..."]: of with the same shape as `in_features` with the output of applying
         SiLU to each element.
     """
-    raise NotImplementedError
+    return cs336_basics.silu.silu_activation(in_features)
 
 
 def run_get_batch(

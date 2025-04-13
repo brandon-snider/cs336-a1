@@ -42,7 +42,7 @@ training:
   eval_interval: 1000
   eval_steps: 50
   eval_batch_size: 128
-  checkpoint_interval: 2500
+  checkpoint_interval: 10_000
   max_l2_norm: 1.0
   lr_max: 6.0e-3
   lr_min: 0
