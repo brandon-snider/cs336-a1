@@ -2,8 +2,8 @@ import torch
 from cs336_basics.cmha import CausalMultiHeadSelfAttention
 from cs336_basics.rmsnorm import RMSNorm
 from cs336_basics.swiglu import SwiGLU
+from cs336_basics.silu import SiLU
 
-# from cs336_basics.silu import SiLU
 from cs336_basics.rope import RotaryPositionalEmbedding
 
 
@@ -16,6 +16,7 @@ class Block(torch.nn.Module):
         rope: RotaryPositionalEmbedding | None = None,
         device=None,
         dtype=None,
+        **kwargs,
     ):
         super().__init__()
 
@@ -26,8 +27,10 @@ class Block(torch.nn.Module):
 
         self.ln2 = RMSNorm(d_model, device=device, dtype=dtype)
 
-        self.ffn = SwiGLU(d_model, d_ff, device, dtype)
-        # self.ffn = SiLU(d_model, d_ff, device, dtype)  # SiLU ablation
+        if kwargs.get("ffn_type", "swiglu") == "silu":
+            self.ffn = SiLU(d_model, d_ff, device, dtype)  # SiLU ablation
+        else:
+            self.ffn = SwiGLU(d_model, d_ff, device, dtype)
 
     def forward(self, x: torch.Tensor):
         x = x + self.attn(self.ln1(x), self.rope)

@@ -18,6 +18,7 @@ class Transformer(torch.nn.Module):
         rope_theta: float,
         device=None,
         dtype=None,
+        **kwargs,
     ):
         super().__init__()
 
@@ -27,11 +28,14 @@ class Transformer(torch.nn.Module):
         rope = RotaryPositionalEmbedding(rope_theta, d_model // num_heads, context_length)
 
         self.layers = torch.nn.ModuleList(
-            [Block(d_model, num_heads, d_ff, rope, device, dtype) for _ in range(num_layers)]
+            [Block(d_model, num_heads, d_ff, rope, device, dtype, **kwargs) for _ in range(num_layers)]
         )
 
         self.ln_final = RMSNorm(d_model, device=device, dtype=dtype)
         self.lm_head = Linear(d_model, vocab_size, device, dtype)
+
+        if kwargs.get("weight_tying", False):
+            self.token_embeddings.weight = self.lm_head.weight
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.token_embeddings(x)

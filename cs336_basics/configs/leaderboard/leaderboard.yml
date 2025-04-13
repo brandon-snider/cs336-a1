@@ -1,0 +1,32 @@
+run:
+  # wandb_project: false
+  wandb_tags: ["owt", "leaderboard"]
+
+data:
+  train_data_path: "/data/c-sniderb/tokens/owt-train/tokens.bin"
+  valid_data_path: "/data/c-sniderb/tokens/owt-valid/tokens.bin"
+
+model:
+  d_model: 1024
+  d_ff: 2688
+  num_heads: 16
+  num_layers: 12
+  context_length: 512
+  vocab_size: 32_000
+  weight_tying: true
+  ffn_type: "swiglu"
+
+optimizer:
+  lr: 6.0e-3
+
+training:
+  batch_size: 128
+  max_steps: 30_000
+  eval_interval: 1000
+  eval_steps: 20
+  eval_batch_size: 256
+  checkpoint_interval: 6_000
+  # max_l2_norm: 1.0
+  lr_max: 6.0e-3
+  lr_min: 3.0e-4
+  warmup_ratio: 0.05
