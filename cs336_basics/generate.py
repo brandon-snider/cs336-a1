@@ -30,7 +30,7 @@ def main():
     # print("-" * 100)
 
     # print("Post-checkpoint")
-    print(decode(model, tokenizer, "The", max_new_tokens=128, temperature=0.7, top_p=0.9))
+    print(decode(model, tokenizer, "The", max_new_tokens=512, temperature=0.7, top_p=0.9))
 
 
 if __name__ == "__main__":

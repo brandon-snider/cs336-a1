@@ -14,10 +14,13 @@ def decode(
     end_id = tokenizer.encode("<|endoftext|>")[0]
     input_ids = tokenizer.encode(prompt)
     device = next(model.parameters()).device
+    context_length = model.context_length
 
     with torch.no_grad():
         for _ in range(max_new_tokens):
-            x = torch.tensor([input_ids], dtype=torch.long, device=device)
+            window_input_ids = input_ids[-context_length:] if len(input_ids) >= context_length else input_ids
+            x = torch.tensor([window_input_ids], dtype=torch.long, device=device)
+
             logits = model(x)
             next_logits = logits[0, -1, :]
 
