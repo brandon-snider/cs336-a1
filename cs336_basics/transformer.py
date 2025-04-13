@@ -29,7 +29,7 @@ class Transformer(torch.nn.Module):
             [Block(d_model, num_heads, d_ff, rope, device, dtype) for _ in range(num_layers)]
         )
 
-        self.ln_final = RMSNorm(d_model, device=device, dtype=dtype)
+        # self.ln_final = RMSNorm(d_model, device=device, dtype=dtype)
         self.lm_head = Linear(d_model, vocab_size, device, dtype)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -38,7 +38,8 @@ class Transformer(torch.nn.Module):
         for layer in self.layers:
             x = layer(x)
 
-        x = self.ln_final(x)
+        # LayerNorm Ablation
+        # x = self.ln_final(x)
         x = self.lm_head(x)
 
         return x
