@@ -1,12 +1,12 @@
 import torch
-from cs336_basics.attention import scaled_dot_product_attention
+from cs336_basics.attention import scaled_dot_product_attention, scaled_dot_product_attention_chunked
 from cs336_basics.linear import Linear
 from cs336_basics.rope import RotaryPositionalEmbedding
 from einops import rearrange
 
 
 class CausalMultiHeadSelfAttention(torch.nn.Module):
-    def __init__(self, d_model: int, num_heads: int, device=None, dtype=None):
+    def __init__(self, d_model: int, num_heads: int, device=None, dtype=None, **kwargs):
         super().__init__()
 
         self.wqkv = Linear(d_model, 3 * d_model, device, dtype)
@@ -15,6 +15,8 @@ class CausalMultiHeadSelfAttention(torch.nn.Module):
         self.num_heads = num_heads
         self.d_model = d_model
         self.d_head = d_model // num_heads
+
+        self.attention_chunk_size = kwargs.get("attention_chunk_size", False)
 
     def forward(
         self,
@@ -37,7 +39,10 @@ class CausalMultiHeadSelfAttention(torch.nn.Module):
         mask = torch.triu(torch.ones((seq_len, seq_len), device=x.device, dtype=torch.bool), diagonal=1)
         mask = ~mask
 
-        output = scaled_dot_product_attention(q, k, v, mask)
+        if self.attention_chunk_size:
+            output = scaled_dot_product_attention_chunked(q, k, v, mask, chunk_size=self.attention_chunk_size)
+        else:
+            output = scaled_dot_product_attention(q, k, v, mask)
         output = rearrange(output, "b h s d -> b s (h d)")
 
         return self.output_proj(output)
