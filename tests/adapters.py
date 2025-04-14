@@ -19,6 +19,10 @@ import cs336_basics.checkpointing
 import cs336_basics.tokenizer
 import cs336_basics.gradient_clip
 import cs336_basics.model
+import cs336_basics.modded
+
+# model_base = cs336_basics.model
+model_base = cs336_basics.model
 
 
 def _merge_attention_weights(weights: dict[str, Tensor]) -> dict[str, Tensor]:
@@ -70,7 +74,7 @@ def run_linear(
     Returns:
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
-    layer = cs336_basics.model.Linear(d_in, d_out)
+    layer = model_base.Linear(d_in, d_out)
     layer.weight.data = weights.clone()
     return layer.forward(in_features)
 
@@ -93,7 +97,7 @@ def run_embedding(
     Returns:
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
-    layer = cs336_basics.model.Embedding(vocab_size, d_model)
+    layer = model_base.Embedding(vocab_size, d_model)
     layer.weight.data = weights.clone()
     return layer.forward(token_ids)
 
@@ -120,7 +124,7 @@ def run_swiglu(
     Returns:
         Float[Tensor, "... d_model"]: Output embeddings of the same shape as the input embeddings.
     """
-    swiglu = cs336_basics.model.SwiGLU(d_model, d_ff)
+    swiglu = model_base.SwiGLU(d_model, d_ff)
     swiglu.w1.weight.data = w1_weight
     swiglu.w2.weight.data = w2_weight
     swiglu.w3.weight.data = w3_weight
@@ -145,7 +149,7 @@ def run_scaled_dot_product_attention(
     Returns:
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
-    return cs336_basics.model.scaled_dot_product_attention(Q, K, V, mask)
+    return model_base.scaled_dot_product_attention(Q, K, V, mask)
 
 
 def run_multihead_self_attention(
@@ -179,11 +183,15 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    mha = cs336_basics.model.CausalMultiHeadSelfAttention(d_model, num_heads)
+    mha = model_base.CausalMultiHeadSelfAttention(d_model, num_heads)
     combined_weight = torch.cat([q_proj_weight, k_proj_weight, v_proj_weight], dim=0)
 
     mha.wqkv.weight.data = combined_weight
     mha.output_proj.weight.data = o_proj_weight
+
+    # mha.to("cuda")
+    # in_features = in_features.to("cuda")
+
     return mha(in_features)
 
 
@@ -224,13 +232,13 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    mha = cs336_basics.model.CausalMultiHeadSelfAttention(d_model, num_heads)
+    mha = model_base.CausalMultiHeadSelfAttention(d_model, num_heads)
     combined_weight = torch.cat([q_proj_weight, k_proj_weight, v_proj_weight], dim=0)
 
     mha.wqkv.weight.data = combined_weight
     mha.output_proj.weight.data = o_proj_weight
 
-    rope = cs336_basics.model.RotaryPositionalEmbedding(theta, d_model // num_heads, max_seq_len)
+    rope = model_base.RotaryPositionalEmbedding(theta, d_model // num_heads, max_seq_len)
 
     return mha(in_features, rope, token_positions)
 
@@ -254,7 +262,7 @@ def run_rope(
     Returns:
         Float[Tensor, " ... sequence_length d_k"]: Tensor with RoPEd input.
     """
-    rope = cs336_basics.model.RotaryPositionalEmbedding(theta, d_k, max_seq_len)
+    rope = model_base.RotaryPositionalEmbedding(theta, d_k, max_seq_len)
     return rope.forward(in_query_or_key, token_positions)
 
 
@@ -328,9 +336,9 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    rope = cs336_basics.model.RotaryPositionalEmbedding(theta, d_model // num_heads, max_seq_len)
+    rope = model_base.RotaryPositionalEmbedding(theta, d_model // num_heads, max_seq_len)
 
-    block = cs336_basics.model.Block(d_model, num_heads, d_ff, rope)
+    block = model_base.Block(d_model, num_heads, d_ff, rope)
     block.load_state_dict(_merge_attention_weights(weights))
 
     return block(in_features)
@@ -415,9 +423,7 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    transformer = cs336_basics.model.Transformer(
-        d_model, num_heads, d_ff, vocab_size, context_length, num_layers, rope_theta
-    )
+    transformer = model_base.Transformer(d_model, num_heads, d_ff, vocab_size, context_length, num_layers, rope_theta)
     transformer.load_state_dict(_merge_attention_weights(weights))
 
     return transformer(in_indices)
@@ -443,7 +449,7 @@ def run_rmsnorm(
         Float[Tensor,"... d_model"]: Tensor of with the same shape as `in_features` with the output of running
         RMSNorm of the `in_features`.
     """
-    layer = cs336_basics.model.RMSNorm(d_model, eps)
+    layer = model_base.RMSNorm(d_model, eps)
     layer.weight.data = weights
     return layer.forward(in_features)
 
@@ -459,7 +465,7 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
         Float[Tensor,"..."]: of with the same shape as `in_features` with the output of applying
         SiLU to each element.
     """
-    return cs336_basics.model.silu_activation(in_features)
+    return model_base.silu_activation(in_features)
 
 
 def run_get_batch(
@@ -498,7 +504,7 @@ def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, "
         Float[Tensor, "..."]: Tensor of with the same shape as `in_features` with the output of
         softmax normalizing the specified `dim`.
     """
-    return cs336_basics.model.softmax(in_features, dim)
+    return model_base.softmax(in_features, dim)
 
 
 def run_cross_entropy(
@@ -658,5 +664,4 @@ def run_train_bpe(
                 representing that <token1> was merged with <token2>.
                 Merges are ordered by order of creation.
     """
-    # return cs336_basics.train_bpe.train_bpe(input_path, vocab_size, special_tokens)
     return cs336_basics.train_bpe.train_bpe(input_path, vocab_size, special_tokens)

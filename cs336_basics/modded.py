@@ -1,6 +1,7 @@
 import torch
 import math
 from einops import einsum, rearrange, reduce
+from cs336_basics.self_atttention.kernel import self_attention
 
 
 def softmax(x: torch.Tensor, dim: int) -> torch.Tensor:
@@ -104,9 +105,11 @@ class CausalMultiHeadSelfAttention(torch.nn.Module):
             q = rope(q, token_positions)
             k = rope(k, token_positions)
 
-        mask = ~torch.triu(torch.ones((seq_len, seq_len), device=x.device, dtype=torch.bool), diagonal=1)
-
-        y = scaled_dot_product_attention(q, k, v, mask)
+        if x.device.type == "cuda":
+            y = self_attention(q, k, v, lens=None, autotune=True)
+        else:
+            mask = ~torch.triu(torch.ones((seq_len, seq_len), device=x.device, dtype=torch.bool), diagonal=1)
+            y = scaled_dot_product_attention(q, k, v, mask)
 
         # Reshape back from (batch, heads, seq_len, head_dim) to (batch, seq_len, dim)
         y = rearrange(y, "b h s d -> b s (h d)")
