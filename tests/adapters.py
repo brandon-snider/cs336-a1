@@ -22,7 +22,7 @@ import cs336_basics.model
 import cs336_basics.modded
 
 # model_base = cs336_basics.model
-model_base = cs336_basics.model
+model_base = cs336_basics.modded
 
 
 def _merge_attention_weights(weights: dict[str, Tensor]) -> dict[str, Tensor]:
@@ -239,6 +239,10 @@ def run_multihead_self_attention_with_rope(
     mha.output_proj.weight.data = o_proj_weight
 
     rope = model_base.RotaryPositionalEmbedding(theta, d_model // num_heads, max_seq_len)
+
+    # mha.to("cuda")
+    # in_features = in_features.to("cuda")
+    # rope = rope.to("cuda")
 
     return mha(in_features, rope, token_positions)
 

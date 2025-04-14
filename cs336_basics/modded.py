@@ -2,6 +2,7 @@ import torch
 import math
 from einops import einsum, rearrange, reduce
 from cs336_basics.self_atttention.kernel import self_attention
+from cs336_basics.self_atttention.kernel_2 import attention
 
 
 def softmax(x: torch.Tensor, dim: int) -> torch.Tensor:
@@ -106,7 +107,10 @@ class CausalMultiHeadSelfAttention(torch.nn.Module):
             k = rope(k, token_positions)
 
         if x.device.type == "cuda":
-            y = self_attention(q, k, v, lens=None, autotune=True)
+            print("Using kernel")
+            # y = self_attention(q, k, v, lens=None, autotune=True)
+            sm_scale = 1.0 / math.sqrt(self.d_head)
+            y = attention(q, k, v, True, sm_scale)
         else:
             mask = ~torch.triu(torch.ones((seq_len, seq_len), device=x.device, dtype=torch.bool), diagonal=1)
             y = scaled_dot_product_attention(q, k, v, mask)

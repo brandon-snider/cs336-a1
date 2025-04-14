@@ -12,7 +12,8 @@ import wandb
 
 from cs336_basics.adamw import AdamW
 from cs336_basics.checkpointing import save_checkpoint, load_checkpoint
-from cs336_basics.transformer import Transformer
+from cs336_basics.model import Transformer
+from cs336_basics.modded import Transformer as TransformerModded
 from cs336_basics.data_loader import get_batch
 from cs336_basics.loss import cross_entropy_loss
 from cs336_basics.gradient_clip import gradient_clip
@@ -177,7 +178,7 @@ def train(config: Config | None = None):
     valid_data = np.memmap(config.data.valid_data_path, dtype=np.uint16, mode="r")
 
     # Initialize model
-    model = Transformer(**config.model, device=device, dtype=dtype)
+    model = TransformerModded(**config.model, device=device, dtype=dtype)
     model.to(device)
 
     optimizer = AdamW(model.parameters(), **config.optimizer)
