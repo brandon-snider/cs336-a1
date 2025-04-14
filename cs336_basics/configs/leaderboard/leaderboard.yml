@@ -16,7 +16,8 @@ model:
   vocab_size: 32_000
   weight_tying: true
   ffn_type: "swiglu"
-  # attention_chunk_size: 1024 # set to False or remove to disable chunking
+  attn_impl: "normal" # "normal", "flash", "chunked"
+  # attn_chunk_size: 1024 # set to False or remove to disable chunking
   # ffn_type: "silu"
 
 optimizer:
