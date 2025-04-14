@@ -263,7 +263,6 @@ def train(config: Config | None = None):
         with torch.autocast(device_type=device, dtype=dtype):
             logits = model(x)
         loss = cross_entropy_loss(logits, y)
-        # loss = F.cross_entropy(logits.view(-1, logits.size(-1)), y.view(-1))
 
         loss.backward()
         norm = gradient_clip(model.parameters(), max_l2_norm)  # norm before clipping
