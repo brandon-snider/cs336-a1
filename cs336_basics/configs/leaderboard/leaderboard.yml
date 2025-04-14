@@ -16,7 +16,7 @@ model:
   vocab_size: 32_000
   weight_tying: true
   ffn_type: "swiglu"
-  attn_impl: "normal" # "normal", "flash", "chunked"
+  attn_impl: "flash" # "normal", "flash", "chunked"
   # attn_chunk_size: 1024 # set to False or remove to disable chunking
   # ffn_type: "silu"
 
@@ -30,9 +30,11 @@ optimizer:
 
 training:
   batch_size: 128
-  max_steps: 30_000
+  # max_steps: 30_000
+  max_steps: 1
   eval_interval: 1000
-  eval_steps: 20
+  # eval_steps: 20
+  eval_steps: 1
   eval_batch_size: 256
   checkpoint_interval: 6_000
   # max_l2_norm: 1.0

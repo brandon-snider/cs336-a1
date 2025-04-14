@@ -1,5 +1,4 @@
 import torch
-from torch.nn import functional as F
 from cs336_basics.attention import scaled_dot_product_attention, scaled_dot_product_attention_chunked
 from cs336_basics.linear import Linear
 from cs336_basics.rope import RotaryPositionalEmbedding
@@ -11,7 +10,7 @@ class CausalMultiHeadSelfAttention(torch.nn.Module):
         super().__init__()
 
         self.attn_impl = kwargs.get("attn_impl", "normal")
-        self.attn_chunk_size = kwargs.get("attn_chunk_size", False)
+        self.attn_chunk_size = kwargs.get("attn_chunk_size", None)
 
         self.wqkv = Linear(d_model, 3 * d_model, device, dtype)
         self.output_proj = Linear(d_model, d_model, device, dtype)
@@ -43,16 +42,12 @@ class CausalMultiHeadSelfAttention(torch.nn.Module):
             q = rope(q, token_positions)
             k = rope(k, token_positions)
 
-        if self.attn_impl == "flash":
-            # PyTorch calls FlashAttention when we implement attention using this
-            y = F.scaled_dot_product_attention(q, k, v, is_causal=True)
-        else:
-            mask = ~torch.triu(torch.ones((seq_len, seq_len), device=x.device, dtype=torch.bool), diagonal=1)
+        mask = ~torch.triu(torch.ones((seq_len, seq_len), device=x.device, dtype=torch.bool), diagonal=1)
 
-            if self.attn_impl == "chunked":
-                y = scaled_dot_product_attention_chunked(q, k, v, mask, chunk_size=self.attn_chunk_size)
-            else:
-                y = scaled_dot_product_attention(q, k, v, mask)
+        if self.attn_impl == "chunked":
+            y = scaled_dot_product_attention_chunked(q, k, v, mask, chunk_size=self.attn_chunk_size)
+        else:
+            y = scaled_dot_product_attention(q, k, v, mask)
 
         # Reshape back from (batch, heads, seq_len, head_dim) to (batch, seq_len, dim)
         y = rearrange(y, "b h s d -> b s (h d)")

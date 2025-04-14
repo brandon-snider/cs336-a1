@@ -24,6 +24,9 @@ model:
   context_length: 256
   num_layers: 4
   rope_theta: 10_000
+  attn_impl: "normal" # "normal", "chunked"
+  # attn_chunk_size: 1024
+
 
 optimizer:
   lr: 6.0e-3
