@@ -38,5 +38,5 @@ training:
   checkpoint_interval: 6_000
   # max_l2_norm: 1.0
   lr_max: 3.0e-3
-  lr_min: 2.5e-4
-  warmup_ratio: 0.1
+  lr_min: 3.0e-4
+  warmup_ratio: 0.05

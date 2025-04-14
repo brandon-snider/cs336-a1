@@ -11,20 +11,13 @@ import torch
 from torch import Tensor
 
 import cs336_basics.adamw
-import cs336_basics.attention
-import cs336_basics.block
-import cs336_basics.cmha
-import cs336_basics.gradient_clip
 import cs336_basics.loss
 import cs336_basics.lr_cosine_schedule
-import cs336_basics.rope
-import cs336_basics.softmax
-import cs336_basics.swiglu
-import cs336_basics.transformer
 import cs336_basics.train_bpe
 import cs336_basics.data_loader
 import cs336_basics.checkpointing
-import cs336_basics.silu
+import cs336_basics.tokenizer
+import cs336_basics.gradient_clip
 import cs336_basics.model
 
 
@@ -77,7 +70,7 @@ def run_linear(
     Returns:
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
-    layer = cs336_basics.linear.Linear(d_in, d_out)
+    layer = cs336_basics.model.Linear(d_in, d_out)
     layer.weight.data = weights.clone()
     return layer.forward(in_features)
 
@@ -100,7 +93,7 @@ def run_embedding(
     Returns:
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
-    layer = cs336_basics.embedding.Embedding(vocab_size, d_model)
+    layer = cs336_basics.model.Embedding(vocab_size, d_model)
     layer.weight.data = weights.clone()
     return layer.forward(token_ids)
 
@@ -127,7 +120,7 @@ def run_swiglu(
     Returns:
         Float[Tensor, "... d_model"]: Output embeddings of the same shape as the input embeddings.
     """
-    swiglu = cs336_basics.swiglu.SwiGLU(d_model, d_ff)
+    swiglu = cs336_basics.model.SwiGLU(d_model, d_ff)
     swiglu.w1.weight.data = w1_weight
     swiglu.w2.weight.data = w2_weight
     swiglu.w3.weight.data = w3_weight
@@ -152,7 +145,7 @@ def run_scaled_dot_product_attention(
     Returns:
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
-    return cs336_basics.attention.scaled_dot_product_attention(Q, K, V, mask)
+    return cs336_basics.model.scaled_dot_product_attention(Q, K, V, mask)
 
 
 def run_multihead_self_attention(
@@ -186,7 +179,7 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    mha = cs336_basics.cmha.CausalMultiHeadSelfAttention(d_model, num_heads)
+    mha = cs336_basics.model.CausalMultiHeadSelfAttention(d_model, num_heads)
     combined_weight = torch.cat([q_proj_weight, k_proj_weight, v_proj_weight], dim=0)
 
     mha.wqkv.weight.data = combined_weight
@@ -231,13 +224,13 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    mha = cs336_basics.cmha.CausalMultiHeadSelfAttention(d_model, num_heads)
+    mha = cs336_basics.model.CausalMultiHeadSelfAttention(d_model, num_heads)
     combined_weight = torch.cat([q_proj_weight, k_proj_weight, v_proj_weight], dim=0)
 
     mha.wqkv.weight.data = combined_weight
     mha.output_proj.weight.data = o_proj_weight
 
-    rope = cs336_basics.rope.RotaryPositionalEmbedding(theta, d_model // num_heads, max_seq_len)
+    rope = cs336_basics.model.RotaryPositionalEmbedding(theta, d_model // num_heads, max_seq_len)
 
     return mha(in_features, rope, token_positions)
 
@@ -261,7 +254,7 @@ def run_rope(
     Returns:
         Float[Tensor, " ... sequence_length d_k"]: Tensor with RoPEd input.
     """
-    rope = cs336_basics.rope.RotaryPositionalEmbedding(theta, d_k, max_seq_len)
+    rope = cs336_basics.model.RotaryPositionalEmbedding(theta, d_k, max_seq_len)
     return rope.forward(in_query_or_key, token_positions)
 
 
@@ -335,9 +328,9 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    rope = cs336_basics.rope.RotaryPositionalEmbedding(theta, d_model // num_heads, max_seq_len)
+    rope = cs336_basics.model.RotaryPositionalEmbedding(theta, d_model // num_heads, max_seq_len)
 
-    block = cs336_basics.block.Block(d_model, num_heads, d_ff, rope)
+    block = cs336_basics.model.Block(d_model, num_heads, d_ff, rope)
     block.load_state_dict(_merge_attention_weights(weights))
 
     return block(in_features)
@@ -422,9 +415,9 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    cls = cs336_basics.transformer.Transformer
-    # cls = cs336_basics.model.Transformer
-    transformer = cls(d_model, num_heads, d_ff, vocab_size, context_length, num_layers, rope_theta)
+    transformer = cs336_basics.model.Transformer(
+        d_model, num_heads, d_ff, vocab_size, context_length, num_layers, rope_theta
+    )
     transformer.load_state_dict(_merge_attention_weights(weights))
 
     return transformer(in_indices)
@@ -450,7 +443,7 @@ def run_rmsnorm(
         Float[Tensor,"... d_model"]: Tensor of with the same shape as `in_features` with the output of running
         RMSNorm of the `in_features`.
     """
-    layer = cs336_basics.rmsnorm.RMSNorm(d_model, eps)
+    layer = cs336_basics.model.RMSNorm(d_model, eps)
     layer.weight.data = weights
     return layer.forward(in_features)
 
@@ -466,7 +459,7 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
         Float[Tensor,"..."]: of with the same shape as `in_features` with the output of applying
         SiLU to each element.
     """
-    return cs336_basics.silu.silu_activation(in_features)
+    return cs336_basics.model.silu_activation(in_features)
 
 
 def run_get_batch(
@@ -505,7 +498,7 @@ def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, "
         Float[Tensor, "..."]: Tensor of with the same shape as `in_features` with the output of
         softmax normalizing the specified `dim`.
     """
-    return cs336_basics.softmax.softmax(in_features, dim)
+    return cs336_basics.model.softmax(in_features, dim)
 
 
 def run_cross_entropy(
@@ -536,7 +529,6 @@ def run_gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm:
     The gradients of the parameters (parameter.grad) should be modified in-place.
     """
     return cs336_basics.gradient_clip.gradient_clip(parameters, max_l2_norm)
-    # return cs336_basics.model.gradient_clip(parameters, max_l2_norm)
 
 
 def get_adamw_cls() -> type[torch.optim.Optimizer]:
