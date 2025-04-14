@@ -1,5 +1,5 @@
 import torch
-from cs336_basics.attention import scaled_dot_product_attention, scaled_dot_product_attention_chunked
+from cs336_basics.attention import scaled_dot_product_attention
 from cs336_basics.linear import Linear
 from cs336_basics.rope import RotaryPositionalEmbedding
 from einops import rearrange

@@ -25,6 +25,7 @@ import cs336_basics.train_bpe
 import cs336_basics.data_loader
 import cs336_basics.checkpointing
 import cs336_basics.silu
+import cs336_basics.model
 
 
 def _merge_attention_weights(weights: dict[str, Tensor]) -> dict[str, Tensor]:
@@ -152,7 +153,6 @@ def run_scaled_dot_product_attention(
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
     return cs336_basics.attention.scaled_dot_product_attention(Q, K, V, mask)
-    # return cs336_basics.attention.scaled_dot_product_attention_chunked(Q, K, V, mask, chunk_size=2048)
 
 
 def run_multihead_self_attention(
@@ -422,9 +422,9 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    transformer = cs336_basics.transformer.Transformer(
-        d_model, num_heads, d_ff, vocab_size, context_length, num_layers, rope_theta
-    )
+    cls = cs336_basics.transformer.Transformer
+    # cls = cs336_basics.model.Transformer
+    transformer = cls(d_model, num_heads, d_ff, vocab_size, context_length, num_layers, rope_theta)
     transformer.load_state_dict(_merge_attention_weights(weights))
 
     return transformer(in_indices)
@@ -536,6 +536,7 @@ def run_gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm:
     The gradients of the parameters (parameter.grad) should be modified in-place.
     """
     return cs336_basics.gradient_clip.gradient_clip(parameters, max_l2_norm)
+    # return cs336_basics.model.gradient_clip(parameters, max_l2_norm)
 
 
 def get_adamw_cls() -> type[torch.optim.Optimizer]:

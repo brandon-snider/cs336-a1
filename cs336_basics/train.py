@@ -8,6 +8,7 @@ import wandb.wandb_run
 import yaml
 import math
 import wandb
+# import torch.nn.functional as F
 
 from cs336_basics.adamw import AdamW
 from cs336_basics.checkpointing import save_checkpoint, load_checkpoint
@@ -180,6 +181,7 @@ def train(config: Config | None = None):
     model.to(device)
 
     optimizer = AdamW(model.parameters(), **config.optimizer)
+    # optimizer = torch.optim.AdamW(model.parameters(), **config.optimizer)
 
     # Load checkpoint if resuming
     if resuming:
@@ -254,6 +256,8 @@ def train(config: Config | None = None):
         with torch.autocast(device_type=device, dtype=dtype):
             logits = model(x)
         loss = cross_entropy_loss(logits, y)
+        # loss = F.cross_entropy(logits.view(-1, logits.size(-1)), y.view(-1))
+
         loss.backward()
         norm = gradient_clip(model.parameters(), max_l2_norm)  # norm before clipping
 
@@ -263,6 +267,8 @@ def train(config: Config | None = None):
 
         optimizer.step()
 
+        if device == "cuda":
+            torch.cuda.synchronize()
         t1 = time.time()
         dt = t1 - t0
         tokens_per_sec = config.model.context_length * batch_size / dt
@@ -289,11 +295,13 @@ def train(config: Config | None = None):
             "grad_norm": f"{norm:.2f}",
             "mem": f"{get_peak_memory(device):.1f}MB",
             "tok/sec": f"{int(tokens_per_sec):,}",
+            "dt": f"{dt * 1000:.2f}ms",
         }
 
-        if step == 1 or step % 10 == 0 or is_last_step:
-            logger.log_info(display_metrics)
+        # if step == 1 or step % 10 == 0 or is_last_step:
+        #     logger.log_info(display_metrics)
 
+        logger.log_info(display_metrics)
         logger.log_metrics(metrics)
 
         if step % eval_interval == 0 or is_last_step:

@@ -1,5 +1,3 @@
-from collections.abc import Callable
-from cs336_basics.lr_cosine_schedule import lr_cosine_schedule
 import torch
 import math
 
@@ -21,11 +19,15 @@ class AdamW(torch.optim.Optimizer):
         self.eps = eps
         self.weight_decay = weight_decay
 
-    def step(self, closure: Callable | None = None):
+    @torch.no_grad()
+    def step(self, closure=None):
         loss = None if closure is None else closure()
 
         for group in self.param_groups:
             b1, b2 = group["betas"]
+            lr = group["lr"]
+            eps = group["eps"]
+            wd = group["weight_decay"]
 
             for p in group["params"]:
                 if p.grad is None:
@@ -37,13 +39,17 @@ class AdamW(torch.optim.Optimizer):
                 v = state.get("v", torch.zeros_like(p.data))
                 t = state.get("t", 1)
 
-                state["m"] = b1 * m + (1 - b1) * p.grad
-                state["v"] = b2 * v + (1 - b2) * p.grad.pow(2)
+                grad = p.grad
 
-                step_size = group["lr"] * (math.sqrt(1 - b2**t) / (1 - b1**t))
+                state["m"] = b1 * m + (1 - b1) * grad
+                state["v"] = b2 * v + (1 - b2) * grad.pow(2)
 
-                p.data -= step_size * (state["m"] / (torch.sqrt(state["v"]) + group["eps"]))
-                p.data -= group["lr"] * group["weight_decay"] * p.data
+                step_size = lr * (math.sqrt(1 - b2**t) / (1 - b1**t))
+
+                p.data.addcdiv_(state["m"], torch.sqrt(state["v"]) + eps, value=-step_size)
+
+                if wd != 0:
+                    p.data.add_(p.data, alpha=-lr * wd)
 
                 state["t"] = t + 1
 
