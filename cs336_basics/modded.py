@@ -1,8 +1,7 @@
 import torch
 import math
 from einops import einsum, rearrange, reduce
-from cs336_basics.self_atttention.kernel import self_attention
-from cs336_basics.self_atttention.kernel_2 import attention
+# from flash_attn import flash_attn_func
 
 
 def softmax(x: torch.Tensor, dim: int) -> torch.Tensor:
@@ -45,7 +44,14 @@ class Linear(torch.nn.Module):
 
 
 class RotaryPositionalEmbedding(torch.nn.Module):
-    def __init__(self, theta: float, d_k: int, max_seq_len: int, device: torch.device | None = None):
+    def __init__(
+        self,
+        theta: float,
+        d_k: int,
+        max_seq_len: int,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ):
         super().__init__()
 
         positions = torch.arange(max_seq_len, device=device).unsqueeze(1)
@@ -53,8 +59,8 @@ class RotaryPositionalEmbedding(torch.nn.Module):
         inv_freq = 1.0 / (theta**freqs)
         angles = positions * inv_freq
 
-        self.register_buffer("cos", angles.cos(), persistent=False)
-        self.register_buffer("sin", angles.sin(), persistent=False)
+        self.register_buffer("cos", angles.cos().to(dtype), persistent=False)
+        self.register_buffer("sin", angles.sin().to(dtype), persistent=False)
 
     def forward(self, x: torch.Tensor, token_positions: torch.Tensor) -> torch.Tensor:
         cos_pos = self.cos[token_positions]
@@ -75,6 +81,8 @@ class RotaryPositionalEmbedding(torch.nn.Module):
 class CausalMultiHeadSelfAttention(torch.nn.Module):
     def __init__(self, d_model: int, num_heads: int, device=None, dtype=None, **kwargs):
         super().__init__()
+
+        self.attn_impl = kwargs.get("attn_impl", "normal")
 
         self.wqkv = Linear(d_model, 3 * d_model, device, dtype)
         self.output_proj = Linear(d_model, d_model, device, dtype)
@@ -106,17 +114,18 @@ class CausalMultiHeadSelfAttention(torch.nn.Module):
             q = rope(q, token_positions)
             k = rope(k, token_positions)
 
-        if x.device.type == "cuda":
-            print("Using kernel")
-            # y = self_attention(q, k, v, lens=None, autotune=True)
-            sm_scale = 1.0 / math.sqrt(self.d_head)
-            y = attention(q, k, v, True, sm_scale)
+        if x.device.type == "cuda" and self.attn_impl == "flash":
+            q = rearrange(q, "b h s d -> b s h d").contiguous()
+            k = rearrange(k, "b h s d -> b s h d").contiguous()
+            v = rearrange(v, "b h s d -> b s h d").contiguous()
+
+            y = flash_attn_func(q, k, v, causal=True)
+            y = rearrange(y, "b s h d -> b s (h d)")
         else:
             mask = ~torch.triu(torch.ones((seq_len, seq_len), device=x.device, dtype=torch.bool), diagonal=1)
             y = scaled_dot_product_attention(q, k, v, mask)
+            y = rearrange(y, "b h s d -> b s (h d)")
 
-        # Reshape back from (batch, heads, seq_len, head_dim) to (batch, seq_len, dim)
-        y = rearrange(y, "b h s d -> b s (h d)")
         return self.output_proj(y)
 
 
@@ -250,7 +259,7 @@ class Transformer(torch.nn.Module):
             raise ValueError("d_model must be divisible by num_heads")
 
         d_head = d_model // num_heads
-        rope = RotaryPositionalEmbedding(rope_theta, d_head, context_length, device=device)
+        rope = RotaryPositionalEmbedding(rope_theta, d_head, context_length, device=device, dtype=dtype)
 
         self.layers = torch.nn.ModuleList(
             [Block(d_model, num_heads, d_ff, rope, device, dtype, **kwargs) for _ in range(num_layers)]

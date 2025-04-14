@@ -21,6 +21,7 @@ import cs336_basics.gradient_clip
 import cs336_basics.model
 import cs336_basics.modded
 
+# @TODO — set to .moddel before submitting
 # model_base = cs336_basics.model
 model_base = cs336_basics.modded
 
@@ -192,7 +193,9 @@ def run_multihead_self_attention(
     # mha.to("cuda")
     # in_features = in_features.to("cuda")
 
-    return mha(in_features)
+    out = mha(in_features)
+
+    return out
 
 
 def run_multihead_self_attention_with_rope(

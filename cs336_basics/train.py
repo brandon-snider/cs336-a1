@@ -162,7 +162,7 @@ def train(config: Config | None = None):
 
     logger = Logger(log_file=log_file, wandb_run=wandb_run, resume=resuming)
 
-    # Save the full configuration for reproducibility (only if not resuming)
+    # Save configuration (only if not resuming)
     if resuming:
         logger.log_info(f"Resuming training from existing config: {config_outfile}")
     else:
@@ -173,15 +173,21 @@ def train(config: Config | None = None):
     device = config.device
     dtype = getattr(torch, config.dtype.split(".")[-1])  # Convert string back to torch dtype
 
-    # Load data
     train_data = np.memmap(config.data.train_data_path, dtype=np.uint16, mode="r")
     valid_data = np.memmap(config.data.valid_data_path, dtype=np.uint16, mode="r")
 
     # Initialize model
+    # @TODO — set to Transformer before submitting
     model = TransformerModded(**config.model, device=device, dtype=dtype)
     model.to(device)
 
+    print(f"Total params: {sum(p.numel() for p in model.parameters())}")
+    print(f"Trainable params: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
+
+    # return
+
     optimizer = AdamW(model.parameters(), **config.optimizer)
+    # @TODO — remove before submitting
     # optimizer = torch.optim.AdamW(model.parameters(), **config.optimizer)
 
     # Load checkpoint if resuming
@@ -270,6 +276,9 @@ def train(config: Config | None = None):
 
         if device == "cuda":
             torch.cuda.synchronize()
+        elif device == "mps":
+            torch.mps.synchronize()
+
         t1 = time.time()
         dt = t1 - t0
         tokens_per_sec = config.model.context_length * batch_size / dt

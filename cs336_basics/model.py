@@ -43,7 +43,14 @@ class Linear(torch.nn.Module):
 
 
 class RotaryPositionalEmbedding(torch.nn.Module):
-    def __init__(self, theta: float, d_k: int, max_seq_len: int, device: torch.device | None = None):
+    def __init__(
+        self,
+        theta: float,
+        d_k: int,
+        max_seq_len: int,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ):
         super().__init__()
 
         positions = torch.arange(max_seq_len, device=device).unsqueeze(1)
@@ -51,8 +58,8 @@ class RotaryPositionalEmbedding(torch.nn.Module):
         inv_freq = 1.0 / (theta**freqs)
         angles = positions * inv_freq
 
-        self.register_buffer("cos", angles.cos(), persistent=False)
-        self.register_buffer("sin", angles.sin(), persistent=False)
+        self.register_buffer("cos", angles.cos().to(dtype), persistent=False)
+        self.register_buffer("sin", angles.sin().to(dtype), persistent=False)
 
     def forward(self, x: torch.Tensor, token_positions: torch.Tensor) -> torch.Tensor:
         cos_pos = self.cos[token_positions]
@@ -243,7 +250,7 @@ class Transformer(torch.nn.Module):
             raise ValueError("d_model must be divisible by num_heads")
 
         d_head = d_model // num_heads
-        rope = RotaryPositionalEmbedding(rope_theta, d_head, context_length, device=device)
+        rope = RotaryPositionalEmbedding(rope_theta, d_head, context_length, device=device, dtype=dtype)
 
         self.layers = torch.nn.ModuleList(
             [Block(d_model, num_heads, d_ff, rope, device, dtype, **kwargs) for _ in range(num_layers)]
