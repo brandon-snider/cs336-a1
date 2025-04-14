@@ -14,7 +14,7 @@
 #set enum(numbering: "a)")
 #set heading(numbering: none)
 
-= BPE Tokenizer
+= 2. BPE Tokenizer
 
 == Problem (`unicode1`): Understanding Unicode (1 point)
 
@@ -47,7 +47,7 @@
   
   This makes sense. This repeated pattern is common when documents are double-encoded or improperly decoded, which is common in scraped web content. In fact, this exact byte sequence appear over 4,500 times in the OWT training set.
   
-+ The OpenWebText tokenizer achieves a greater compression ratio, but with the tradeoff of having a much larger vocabulary size that enables it to capture domain-specific patterns and web content artifacts. The TinyStories tokenizer specializes in clean, simple English, reflecting the characteristics of its clean training set in contrast to the civerse, noisy content from the broader internet.
++ The OpenWebText tokenizer achieves a greater compression ratio, but with the tradeoff of having a much larger vocabulary size that enables it to capture domain-specific patterns and web content artifacts. The TinyStories tokenizer specializes in clean, simple English, reflecting the characteristics of its clean, narrow training set in contrast to the diverse, noisy content from the broader internet.
 
 == Problem (`tokenizer_experiments`): Experiments with Tokenizers (4 points)
 
@@ -63,7 +63,7 @@
 
 + `uint16` is appropriate because of our vocabulary sizes. Both vocabulary sizes are $> 2^8$ and $< 2^16$. This means we can't use an 8-bit representation (we'd have token IDs greater than the representation can store) and we don't need more than a 16-bit representation (all token IDs can be expressed in a 16-bit representation). `uint16` is therefore the most memory-efficient choice.
 
-= Transformer Language Model Architecture
+= 3. Transformer Language Model Architecture
 
 == Problem (`transformer_accounting`): LM resource accounting (5 points)
 
@@ -379,7 +379,7 @@ $
   
 + The total FLOPs required increases from $4,513,336,524,800$ to $149,522,795,724,800$. The FLOPs for all operations except the attention operation increase linearly in the length of the context window (by a factor of $2^4$, in this case). The FLOPs for the attention operation (both $Q^T K$ and $W V$, where $W$ represents the normalized attention weights) increase quadratically in the length of the context window (by a factor of $2^8$, in this case).
 
-= Training a Transformer LM
+= 4. Training a Transformer LM
 
 == Problem (`learning_rate_tuning`): Tuning the learning rate (1 point)
 
@@ -474,3 +474,43 @@ For learning rates of 1, 1e1, and 1e2, the loss decreases more quickly as the le
 + \@TODO
 
 + \@TODO
+
+= 7. Experiments
+
+== Problem (`learning_rate`): Tune the learning rate (3 points)
+
++ \@TODO (hyperparemeter sweep; learning curves; model w/1.45 loss)
+
++ \@TODO (folk wisdom; edge of stability)
+
+== Problem (`batch_size_experiment`): Batch size variations (1 point)
+
++ \@TODO (variants I tried; learning curves; comments on findings)
+
+== Problem (`generate`): Generate text (1 point)
+
++ \@TODO (256-token output from TS model; comments on fluency and factors)
+
+== Problem (`layer_norm_ablation`): Remove RMSNorm and train (1 point)
+
++ \@TODO (learning curves at prev. optimal LR and new optimal LR; comments on diff.)
+
+== Problem (`pre-norm_ablation`): Implement post-norm and train (1 point)
+
++ \@TODO (learning curves for post-norm compared to pre-norm; comments on diff.)
+
+== Problem (`no_pos_emb`): Implement NoPE (1 point)
+
++ \@TODO (learning curves comparing NoPE and RoPE; comments on diff.)
+
+== Problem (`swiglu_ablation`): SwiGLU vs SiLU (1 point)
+
++ \@TODO (learning curves comparing SwiGLU and SiLU; few sentences on findings)
+
+== Problem (`main_experiment`): Experiment on OWT (2 points)
+
++ \@TODO (learning curve on OWT; diff. from TS + interpretation; generation+ comments)
+
+== Problem (`leaderboard`): Leaderboard (6 points)
+
++ \@TODO (final validation loss; associated learning curve; description of what was done)
