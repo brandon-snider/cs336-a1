@@ -9,4 +9,5 @@
 #SBATCH --error=train_leaderboard_%j.err
 
 uv run -m cs336_basics.train \
-		--config cs336_basics/configs/leaderboard/leaderboard-lg.yml
+		--config cs336_basics/configs/leaderboard/leaderboard-xl.yml \
+    --override-param training.lr_schedule=linear

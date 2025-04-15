@@ -20,10 +20,10 @@ model:
   attn_impl: "normal" 
 
 optimizer:
-  lr: 5.0e-4
-  betas: [0.9, 0.98]
+  lr: 1.4e-3
+  betas: [0.9, 0.95]
   eps: 1.0e-8
-  weight_decay: 0.01
+  weight_decay: 0.05
 
 # Total tokens = batch_size * max_steps * context_length
 # 128 * 17_500 * 512 = 1,120,000,000 = 1.120B
@@ -38,9 +38,7 @@ training:
   eval_batch_size: 128
   checkpoint_interval: 17_500
   max_l2_norm: 1.0
-  lr_max: 5.0e-4
-  lr_min: 1.8e-4
-  warmup_ratio: 0.01
-  # cosine_cycle_iters: 8250 # hack to change shape of cosine schedule
-  # lr_schedule: "linear"
-  # linear_cycle_iters: 17_500 # defaults to max_steps - warmup_iters
+  lr_max: 1.4e-3
+  lr_min: 4.0e-4
+  warmup_ratio: 0.05
+  # cosine_cycle_iters: 42_000 # hack to change shape of cosine schedule

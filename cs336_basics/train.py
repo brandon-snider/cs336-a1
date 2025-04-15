@@ -12,6 +12,7 @@ import wandb
 
 from cs336_basics.adamw import AdamW
 from cs336_basics.checkpointing import save_checkpoint, load_checkpoint
+from cs336_basics.lr_linear_schedule import lr_linear_schedule
 from cs336_basics.model import Transformer
 from cs336_basics.modded import Transformer as TransformerModded
 from cs336_basics.data_loader import get_batch
@@ -105,7 +106,12 @@ def load_config(config_path: str | None = None, base_config: dict | None = None)
     config["run"]["run_id"] = config["run"]["run_id"].replace("<timestamp>", f"{int(time.time())}")
 
     config["training"]["warmup_iters"] = int(config["training"]["warmup_ratio"] * config["training"]["max_steps"])
-    config["training"]["cosine_cycle_iters"] = config["training"]["max_steps"] - config["training"]["warmup_iters"]
+
+    if config["training"].get("cosine_cycle_iters", None) is None:
+        config["training"]["cosine_cycle_iters"] = config["training"]["max_steps"] - config["training"]["warmup_iters"]
+
+    if config["training"].get("linear_cycle_iters", None) is None:
+        config["training"]["linear_cycle_iters"] = config["training"]["max_steps"] - config["training"]["warmup_iters"]
 
     # Detect device and dtype at runtime
     device = "cpu"
@@ -210,6 +216,7 @@ def train(config: Config | None = None):
     lr_min = config.training.lr_min
     warmup_iters = config.training.warmup_iters
     cosine_cycle_iters = config.training.cosine_cycle_iters
+    linear_cycle_iters = config.training.linear_cycle_iters
     max_l2_norm = config.training.max_l2_norm
     eval_interval = config.training.eval_interval
     checkpoint_interval = config.training.checkpoint_interval
@@ -267,7 +274,11 @@ def train(config: Config | None = None):
         loss.backward()
         norm = gradient_clip(model.parameters(), max_l2_norm)  # norm before clipping
 
-        lr = lr_cosine_schedule(step, lr_max, lr_min, warmup_iters, cosine_cycle_iters)
+        if config.training.lr_schedule == "linear":
+            lr = lr_linear_schedule(step, lr_max, lr_min, warmup_iters, linear_cycle_iters)
+        else:
+            lr = lr_cosine_schedule(step, lr_max, lr_min, warmup_iters, cosine_cycle_iters)
+
         for param_group in optimizer.param_groups:
             param_group["lr"] = lr
 

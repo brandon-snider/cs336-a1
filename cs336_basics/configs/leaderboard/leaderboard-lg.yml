@@ -12,7 +12,7 @@ model:
   # d_ff: 4096
   num_heads: 16
   num_layers: 12
-  context_length: 256
+  context_length: 512
   vocab_size: 32_000
   weight_tying: true
   ffn_type: "swiglu"
@@ -20,24 +20,29 @@ model:
   attn_impl: "normal" 
 
 optimizer:
-  lr: 2.0e-3
-  betas: [0.9, 0.95]
+  lr: 5.0e-4
+  betas: [0.9, 0.98]
+  eps: 1.0e-8
+  weight_decay: 0.01
 
 # Total tokens = batch_size * max_steps * context_length
-# 128 * 30_000 * 512 = 1,966,080,000 = 1.966B
-# Required throughput = 1.966B tokens / 5400s = 364k tokens/s
-# Current empirical throughput: 225k tokens/s
+# 128 * 16_000 * 512 = 1,048,576,000 = 1.048B
+# Required throughput = 1.048B tokens / 5400s = 194k tokens/s
+# Current empirical throughput: 200k tokens/s (max. 1,080,000,000 = 1.080B total)
 
 training:
-  batch_size: 256
-  max_steps: 20_000
+  batch_size: 128
+  max_steps: 16_000
   # max_steps: 1
-  eval_interval: 1_000
-  eval_steps: 20
+  eval_interval: 2_000
+  eval_steps: 30
   # eval_steps: 1
-  eval_batch_size: 256
-  checkpoint_interval: 5_000
+  eval_batch_size: 128
+  checkpoint_interval: 15_000
   # max_l2_norm: 1.0
-  lr_max: 2.0e-3
-  lr_min: 2.0e-4
-  warmup_ratio: 0.07
+  lr_max: 5.0e-4
+  lr_min: 1.8e-4
+  warmup_ratio: 0.01
+  # cosine_cycle_iters: 16_000
+  # lr_schedule: "linear"
+  linear_cycle_iters: 16_000
