@@ -221,11 +221,16 @@ def train(config: Config | None = None):
     eval_interval = config.training.eval_interval
     checkpoint_interval = config.training.checkpoint_interval
 
-    def evaluate(step: int):
+    def evaluate(step: int, is_last_step: bool):
+        n_eval_steps = config.training.eval_steps
+
+        if is_last_step:
+            n_eval_steps = n_eval_steps * 3
+
         model.eval()
         with torch.no_grad():
             val_loss = 0.0
-            for _ in range(config.training.eval_steps):
+            for _ in range(n_eval_steps):
                 x, y = get_batch(valid_data, config.training.eval_batch_size, config.model.context_length, device)
                 with torch.autocast(device_type=device, dtype=dtype):
                     logits = model(x)
@@ -325,7 +330,7 @@ def train(config: Config | None = None):
         logger.log_metrics(metrics)
 
         if step % eval_interval == 0 or is_last_step:
-            evaluate(step)
+            evaluate(step, is_last_step)
 
         if step % checkpoint_interval == 0 or is_last_step:
             checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint_{step}.pt")

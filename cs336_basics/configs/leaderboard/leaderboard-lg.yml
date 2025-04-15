@@ -35,7 +35,7 @@ training:
   max_steps: 16_000
   # max_steps: 1
   eval_interval: 2_000
-  eval_steps: 30
+  eval_steps: 25
   # eval_steps: 1
   eval_batch_size: 128
   checkpoint_interval: 15_000
