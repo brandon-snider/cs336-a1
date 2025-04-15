@@ -13,6 +13,7 @@
 
 #set enum(numbering: "a)")
 #set heading(numbering: none)
+#show link: underline
 
 = 2. BPE Tokenizer
 
@@ -71,30 +72,30 @@
   $ p_"total" = p_"embedding" + p_"layers" + p_"ln_final" + p_"lm_head"  $
   Parameter count of the embedding matrix:
   $ p_"embedding" = "vocab_size" times d_"model" = 50,257 times 1,600 = 80,411,200 $
-  Parameter count of all transformer blocks:
+  Parameter count of all transformer blocks (un-gated MLP):
   $ p_"layers" &= "num_layers" times p_"layer" \
     p_"layer" &= (2 times p_"ln") + p_"attn" + p_"ffn" \ 
     &= (2 times d_"model") + (p_"wqkv" + p_"out_proj") + (p_"w1" + p_"w2" + p_"w3") \
-    &= (2 times d_"model") + (d_"model" times 3 times d_"model" + d_"model" times d_"model") + (3 times d_"model" times d_"ff") \
-    &= (2 times 1,600) + (1,600 times 3 times 1,600 + 1,600 times 1,600) + (3 times 1,600 times 6,400) \
-    &= 40,963,200 \
-    p_"layers" &= 48 times 40,963,200 \
-    &= 1,966,233,600
+    &= (2 times d_"model") + (d_"model" times 3 times d_"model" + d_"model" times d_"model") + (2 times d_"model" times d_"ff") \
+    &= (2 times 1,600) + (1,600 times 3 times 1,600 + 1,600 times 1,600) + (2 times 1,600 times 6,400) \
+    &= 30,723,200 \
+    p_"layers" &= 48 times 30,723,200 \
+    &= 1,474,713,600
   $
   Parameter count of the final layer norm:
   $ p_"ln" = d_"model" = 1600 $
-  Parameter count of the LM head:
+  Parameter count of the LM head (assuming no weight tying):
   $ p_"lm_head" = d_"model" times "vocab_size" = 1,600 times 50,257 = 80,411,200 $
   Final parameter count:
   $ p_"total" &= p_"embedding" + p_"layers" + p_"ln_final" + p_"lm_head" \
-    &= 80,411,200 + 1,966,233,600 + 1600 + 80,411,200 \
-    &= 2,127,057,600
+    &= 80,411,200 + 1,474,713,600 + 1600 + 80,411,200 \
+    &= 1,635,537,600
   $
-  Assuming each parameter is represented using single-recision floating point (4 bytes), the memory required to load the model is:
+  Assuming each parameter is represented using single-precision floating point (4 bytes), the memory required to load the model is:
   $ "memory" &= p_"total" times "memory_per_param" \
-    &= 2,127,057,600 times 4 \
-    &= 8,508,230,400 "bytes" \
-    &approx 8.51"GB"
+    &= 1,635,537,600 times 4 \
+    &= 6,542,150,400 "bytes" \
+    &approx 6.54"GB"
   $ 
   
 + *GPT-2 XL analysis:*
@@ -124,9 +125,6 @@
     &= 48 times (2 times 1,600 times 6,400 times 1,024) \
     &= 1,006,632,960,000 $
 
-  Parallel up projection in the FFN (identical):
-  $ F_"ffn_parallel" = F_"ffn_up" = 1,006,632,960,000 $
-
   Down projection in the FFN, across all layers (same $m,n, p$; different order): 
   $ F_"ffn_down" = F_"ffn_up" = 1,006,632,960,000 $
 
@@ -143,32 +141,31 @@
       &= 1,328,755,507,200 \
       &approx 1.33 times 10^12 "FLOPs" \
 
-    F_"ffn" &= F_"ffn_up" + F_"ffn_parallel" + F_"ffn_down" \
-      &= 3 times 1,006,632,960,000 \
-      &= 3,019,898,880,000 \
-      &approx 3.02 times 10^12 "FLOPs" \
+    F_"ffn" &= F_"ffn_up" + F_"ffn_down" \
+      &= 2 times 1,006,632,960,000 \
+      &= 2,013,265,920,000 \
+      &approx 2.01 times 10^12 "FLOPs" \
 
-    F_"total" &= 1,328,755,507,200 + 3,019,898,880,000 + 164,682,137,600 \
-      &= 4,513,336,524,800 \
-      &approx 4.51 times 10^12 "FLOPs" $
+    F_"total" &= 1,328,755,507,200 + 2,013,265,920,000 + 164,682,137,600 \
+      &= 3,506,703,564,800 \
+      &approx 3.51 times 10^12 "FLOPs" $
   
   Proportions:
   $ 
-    P_"attn_qkv" &= 754,974,720,000 " / " F_"total" approx 16.7% \
-    P_"attn_weights" &= 161,061,273,600 " / " F_"total" approx 3.6% \
-    P_"attn_values" &= 161,061,273,600 " / " F_"total" approx 3.6% \
-    P_"attn_out" &= 251,658,240,000 " / " F_"total" approx 5.6% \
-    P_"attn" &= 1,328,755,507,200 " / " F_"total" approx 29% \
+    P_"attn_qkv" &approx 21.53% \
+    P_"attn_weights" &approx 4.59% \
+    P_"attn_values" &approx 4.59% \
+    P_"attn_out" &approx 7.18% \
+    P_"attn" &approx 37.89% \
     \
-    P_"ffn_up" &= 1,006,632,960,000 " / " F_"total" approx 22.3% \
-    P_"ffn_parallel" &= 1,006,632,960,000 " / " F_"total" approx 22.3% \
-    P_"ffn_down" &= 1,006,632,960,000 " / " F_"total" approx 22.3% \
-    P_"ffn" &= 3,019,898,880,000 " / " F_"total" approx 66.9% \
+    P_"ffn_up" &approx 28.71% \
+    P_"ffn_down" &approx 28.71% \
+    P_"ffn" &approx 57.41% \
     \
-    P_"lm_head" &= 164,682,137,600 " / " F_"total" approx 3.7% \
+    P_"lm_head" &approx 4.70% \
   $
 
-+ The FFNs require the most FLOPs by far, accounting for roughly $67%$ of the total (with each of the three matrix multiplications in the FFNs contributing equally). The attention blocks are the next most significant, accounting for roughly $29%$ of the total.
++ The FFNs require the most FLOPs by far, accounting for roughly $57%$ of the total (with each of the three matrix multiplications in the FFNs contributing equally). The attention blocks are the next most significant, accounting for roughly $38%$ of the total.
 
 + *GPT-2 small analysis:*
   
@@ -197,9 +194,6 @@
     &= 12 times (2 times 768 times 3,072 times 1,024) \
     &= 57,982,058,496 $
 
-  Parallel up projection in the FFN (identical):
-  $ F_"ffn_parallel" = F_"ffn_up" = 57,982,058,496 $
-
   Down projection in the FFN, across all layers (same $m,n,p$; different order):
   $ F_"ffn_down" = F_"ffn_up" = 57,982,058,496 $
 
@@ -213,29 +207,29 @@
     &= 43,486,543,872 + 19,327,352,832 + 19,327,352,832 + 14,495,514,624 \
     &= 96,636,764,160 \
 
-    F_"ffn" &= F_"ffn_up" + F_"ffn_parallel" + F_"ffn_down" \
-    &= 57,982,058,496 + 57,982,058,496 + 57,982,058,496 \
-    &= 173,946,175,488 \
+    F_"ffn" &= F_"ffn_up" + F_"ffn_down" \
+    &= 57,982,058,496 + 57,982,058,496 \
+    &= 115,964,116,992 \
 
     F_"total" &= F_"attn" + F_"ffn" + F_"lm_head" \
-    &= 96,636,764,160 + 173,946,175,488 + 79,047,426,048 \
-    &= 349,630,365,696 $
+    &= 96,636,764,160 + 115,964,116,992 + 79,047,426,048 \
+    &= 291,648,307,200 \
+    &approx 2.92 times 10^11 "FLOPs" $
 
   Proportions:
 
   $ 
-  P_"attn_qkv" &= 43,486,543,872 " / " F_"total" approx 12.4% \
-  P_"attn_weights" &= 19,327,352,832 " / " F_"total" approx 5.5% \
-  P_"attn_values" &= 19,327,352,832 " / " F_"total" approx 5.5% \
-  P_"attn_out" &= 14,495,514,624 " / " F_"total" approx 4.1% \
-  P_"attn" &= 96,636,764,160 " / " F_"total" approx 27.6% \
+  P_"attn_qkv" &approx 14.91% \
+  P_"attn_weights" &approx 6.63% \
+  P_"attn_values" &approx 6.63% \
+  P_"attn_out" &approx 4.97% \
+  P_"attn" &approx 33.13% \
   \
-  P_"ffn_up" &= 57,982,058,496 " / " F_"total" approx 16.6% \
-  P_"ffn_parallel" &= 57,982,058,496 " / " F_"total" approx 16.6% \
-  P_"ffn_down" &= 57,982,058,496 " / " F_"total" approx 16.6% \
-  P_"ffn" &= 173,946,175,488 " / " F_"total" approx 49.8% \
+  P_"ffn_up" &approx 19.88% \
+  P_"ffn_down" &approx 19.88% \
+  P_"ffn" &approx 39.76% \
   \
-  P_"lm_head" &= 79,047,426,048 " / " F_"total" approx 22.6% \
+  P_"lm_head" &approx 27.1% \
 $
 
   *GPT-2 medium analysis:*
@@ -265,9 +259,6 @@ $
     &= 24 times (2 times 1,024 times 4,096 times 1,024) \
     &= 206,158,430,208 $
 
-  Parallel up projection in the FFN (identical):
-  $ F_"ffn_parallel" = F_"ffn_up" = 206,158,430,208 $
-
   Down projection in the FFN, across all layers (same $m,n,p$; different order):
   $ F_"ffn_down" = F_"ffn_up" = 206,158,430,208 $
 
@@ -281,29 +272,29 @@ $
     &= 154,618,822,656 + 51,539,607,552 + 51,539,607,552 + 51,539,607,552 \
     &= 309,237,645,312 \
 
-    F_"ffn" &= F_"ffn_up" + F_"ffn_parallel" + F_"ffn_down" \
-    &= 206,158,430,208 + 206,158,430,208 + 206,158,430,208 \
-    &= 618,475,290,624 \
+    F_"ffn" &= F_"ffn_up" + F_"ffn_down" \
+    &= 206,158,430,208 + 206,158,430,208 \
+    &= 412,316,860,416 \
 
     F_"total" &= F_"attn" + F_"ffn" + F_"lm_head" \
-    &= 309,237,645,312 + 618,475,290,624 + 105,396,568,064 \
-    &= 1,033,109,504,000 $
+    &= 309,237,645,312 + 412,316,860,416 + 105,396,568,064 \
+    &= 826,951,073,792 \
+    &approx 8.27 times 10^11 "FLOPs" $
 
   Proportions:
 
   $ 
-    P_"attn_qkv" &= 154,618,822,656 " / " F_"total" approx 15.0% \
-    P_"attn_weights" &= 51,539,607,552 " / " F_"total" approx 5.0% \
-    P_"attn_values" &= 51,539,607,552 " / " F_"total" approx 5.0% \
-    P_"attn_out" &= 51,539,607,552 " / " F_"total" approx 5.0% \
-    P_"attn" &= 309,237,645,312 " / " F_"total" approx 29.9% \
+    P_"attn_qkv" &approx 18.70% \
+    P_"attn_weights" &approx 6.23% \
+    P_"attn_values" &approx 6.23% \
+    P_"attn_out" &approx 6.23% \
+    P_"attn" &approx 37.39% \
     \
-    P_"ffn_up" &= 206,158,430,208 " / " F_"total" approx 20.0% \
-    P_"ffn_parallel" &= 206,158,430,208 " / " F_"total" approx 20.0% \
-    P_"ffn_down" &= 206,158,430,208 " / " F_"total" approx 20.0% \
-    P_"ffn" &= 618,475,290,624 " / " F_"total" approx 59.9% \
+    P_"ffn_up" &approx 24.93% \
+    P_"ffn_down" &approx 24.93% \
+    P_"ffn" &approx 49.86% \
     \
-    P_"lm_head" &= 105,396,568,064 " / " F_"total" approx 10.2% \
+    P_"lm_head" &approx 12.75% \
   $
 
   *GPT-2 large analysis:*
@@ -333,9 +324,6 @@ $
     &= 36 times (2 times 1,280 times 5,120 times 1,024) \
     &= 483,183,820,800 $
 
-  Parallel up projection in the FFN (identical):
-  $ F_"ffn_parallel" = F_"ffn_up" = 483,183,820,800 $
-
   Down projection in the FFN, across all layers (same $m,n,p$; different order):
   $ F_"ffn_down" = F_"ffn_up" = 483,183,820,800 $
 
@@ -349,35 +337,35 @@ $
     &= 362,387,865,600 + 96,636,764,160 + 96,636,764,160 + 120,795,955,200 \
     &= 676,457,349,120 \
 
-    F_"ffn" &= F_"ffn_up" + F_"ffn_parallel" + F_"ffn_down" \
-    &= 483,183,820,800 + 483,183,820,800 + 483,183,820,800 \
-    &= 1,449,551,462,400 \
+    F_"ffn" &= F_"ffn_up" + F_"ffn_down" \
+    &= 483,183,820,800 + 483,183,820,800 \
+    &= 966,367,641,600 \
 
     F_"total" &= F_"attn" + F_"ffn" + F_"lm_head" \
-    &= 676,457,349,120 + 1,449,551,462,400 + 131,745,710,080 \
-    &= 2,257,754,521,600 $
+    &= 676,457,349,120 + 966,367,641,600 + 131,745,710,080 \
+    &= 1,774,570,700,800 \
+    &approx 1.77 times 10^12 "FLOPs" $
 
   Proportions:
   $ 
-    P_"attn_qkv" &= 362,387,865,600 " / " F_"total" approx 16.1% \
-    P_"attn_weights" &= 96,636,764,160 " / " F_"total" approx 4.3% \
-    P_"attn_values" &= 96,636,764,160 " / " F_"total" approx 4.3% \
-    P_"attn_out" &= 120,795,955,200 " / " F_"total" approx 5.4% \
-    P_"attn" &= 676,457,349,120 " / " F_"total" approx 30.0% \
+    P_"attn_qkv" &approx 20.42% \
+    P_"attn_weights" &approx 5.45% \
+    P_"attn_values" &approx 5.45% \
+    P_"attn_out" &approx 6.81% \
+    P_"attn" &approx 38.12% \
     \
-    P_"ffn_up" &= 483,183,820,800 " / " F_"total" approx 21.4% \
-    P_"ffn_parallel" &= 483,183,820,800 " / " F_"total" approx 21.4% \
-    P_"ffn_down" &= 483,183,820,800 " / " F_"total" approx 21.4% \
-    P_"ffn" &= 1,449,551,462,400 " / " F_"total" approx 64.2% \
+    P_"ffn_up" &approx 27.23% \
+    P_"ffn_down" &approx 27.23% \
+    P_"ffn" &approx 54.46% \
     \
-    P_"lm_head" &= 131,745,710,080 " / " F_"total" approx 5.8% \
+    P_"lm_head" &approx 7.42% \
   $
 
   Analysis:
 
   The FFN computations increasingly dominate as model size increases. The contribution from the LM head is significant (greater than the contribution from attention) at the smallest model size, and diminishes quickly as model size increases.
   
-+ The total FLOPs required increases from $4,513,336,524,800$ to $149,522,795,724,800$. The FLOPs for all operations except the attention operation increase linearly in the length of the context window (by a factor of $2^4$, in this case). The FLOPs for the attention operation (both $Q^T K$ and $W V$, where $W$ represents the normalized attention weights) increase quadratically in the length of the context window (by a factor of $2^8$, in this case).
++ The total FLOPs required increases from $3.51 times 10^12$ to $1.33 times 10^14$. The FLOPs for all operations except the attention operation increase linearly in the length of the context window (by a factor of $2^4$, in this case). The FLOPs for the attention operation (both $Q^T K$ and $W V$, where $W$ represents the normalized attention weights) increase quadratically in the length of the context window (by a factor of $2^8$, in this case).
 
 = 4. Training a Transformer LM
 
@@ -439,7 +427,7 @@ For learning rates of 1, 1e1, and 1e2, the loss decreases more quickly as the le
     - Output projection: $B times T times d$
   - FFN:
     - $W_1$ output: $B times T times 4d = 4 times B times T times d$
-    - SiTU activation: $B times T times 4d = 4 times B times T times d$
+    - SiLU activation: $B times T times 4d = 4 times B times T times d$
     - $W_2$ output: $B times T times d$
   - Total: $16 (B T d) + 2(B h T^2)$
 
@@ -447,7 +435,7 @@ For learning rates of 1, 1e1, and 1e2, the loss decreases more quickly as the le
 
   Final RMSNorm: $B times T times d$
 
-  Output embedding (TM head): $B times T times V$
+  Output embedding (LM head): $B times T times V$
 
   Cross-entropy on logits: $B times T$
 
@@ -457,59 +445,228 @@ For learning rates of 1, 1e1, and 1e2, the loss decreases more quickly as the le
 
   *Final Peak Memory Expression*
 
-  $ "TotalMemory" &= "ParamMemory" + "AdamMemory" + "GradMemory" + "ActMemory" \
-    &= 4P + 8P + 4P + 4A \
-    &= 16P + 4A "bytes" \
-    &= 16[(2 V d) + N(12d^2 + 2d) + d] + 4[N (16 B T d + 2 B h T^2) + (B T d) + (B T V) + (B T)]
+  $ "TotalMemory" = &"ParamMemory" + "AdamMemory" + "GradMemory" + "ActMemory" \
+    = &4P + 8P + 4P + 4A \
+    = &16P + 4A "bytes" \
+    = &16[(2 V d) + N(12d^2 + 2d) + d] + \ &4[N (16 B T d + 2 B h T^2) + (B T d) + (B T V) + (B T)]
   $
 
-+ $"TotalMemory"(B) = 15,311,904,768B (B) + 26,168,601,600 "bytes" approx 26 "GB"$
++ $"TotalMemory"(B) = (15,311,904,768 times B) + 26,168,601,600 "bytes" approx 26 "GB"$
   
   We require $"TotalMemory"(B) lt.eq 80 times 10^9 "bytes", B in ZZ$, so:
-  $ 15,311,904,768 (B) + 26,168,601,600 &lt.eq 80,000,000,000 \
+  $ (15,311,904,768 times B) + 26,168,601,600 &lt.eq 80,000,000,000 \
   => B &lt.eq 3 $
 
   With 80 GB available, and storing every intermediate value for every layer in float32, our maximum batch size is 3.
 
-+ \@TODO
++ Per part a), the total parameter count is: $P = (2V d) + N(12d^2 + 2d) + d$
 
-+ \@TODO
+  To run a step of AdamW, we compute the matrix multiplications for both the forward and backward passes. With a context length of $T = 1024$ and a batch size of $B$, we then have $1024 times B$ data points and $P$ parameters.
 
+  Forward pass FLOPs: $2 times (1024 times B) times P$
+
+  Backward pass FLOPs: $4 times (1024 times B) times P$
+
+  Total FLOPs: $6 times (1024 times B) times P = 6 times (1024 times B) times [(2V d) + N(12d^2 + 2d) + d]$
+
++ FLOPs/step:
+  $ F_"step" &= 6 dot (1024 times 1024) dot [(2 dot 50257 dot 1600) + 48(12 dot 1600^2 + 2 dot 1600) + 1600] \
+             &= 6 dot (1024 times 1024) dot 1,635,537,600 \
+             &= 10,289,912,846,745,600 \
+             &= 10.29 times 10^15 "FLOPs" $
+
+  Total FLOPs:
+  $ F_"total" = F_"step" times 400,000 =  4,115,965,138,698,240,000,000 $
+
+  Achieved FLOP/s:
+  $ F_"achieved" = 19.5 * 10^12 * 50% =  9.75 times 10^12 "FLOPs/s" $
+
+  Time to train:
+  $ t_"train" &= F_"total" \/ F_"achieved" \
+            &= 4,115,965,138,698,240,000,000 \/ (9.75 times 10^12) \
+            &= 422,150,270.64 "s" \
+            &= 4,886 "days"
+  $
+  
 = 7. Experiments
 
 == Problem (`learning_rate`): Tune the learning rate (3 points)
 
-+ \@TODO (hyperparemeter sweep; learning curves; model w/1.45 loss)
++ #figure(
+    image("images/learning-rate-sweep.png"),
+    caption: "Learning rate sweep on TinyStories",
+  )
 
-+ \@TODO (folk wisdom; edge of stability)
+  #link("https://api.wandb.ai/links/brandon-snider-stanford-university/eeme38mw", "WandB Report")
+
+  Final losses:
+
+  #table(columns: (auto, auto), inset: 10pt, align:horizon,table.header([learning rate],[eval/loss]),
+  [1e-5], [8.188],
+  [1e-4], [2.824],
+  [1e-3], [1.459],
+  [3e-3], [1.392],
+  [5e-3], [1.379],
+  [6e-3], [1.381],
+  [7e-3], "Diverged",
+  [1e-2], "Diverged"
+  )
+
+  Search strategy:
+
+  I started with a log-spaced search of 1e-5 to 1e-2. 1e-5 and 1e-4 were much too low, and I saw divergence at 1e-2. Given that training was very stable at 1e-3 and my loss was still higher than the 1.45 reference, I guessed that the sweetspot would be slightly greater (rather than slightly smaller). I started searching up from 1e-3 to the point of divergence. I tried 3e-3, 5e-3, and 7e-3. I saw divergence at 7e-3, so tried 6e-3 just to narrow down the divergence point. I found that 6e-3 was stable, and therefore probably near the edge of stability.
+
++ The folk wisdom seems to be roughly accurate in my case, though I got negligibly better loss and more stable training at 5e-3 (1e-3 down from the highest stable learning rate that I tried). This suggests that being close to the edge is good, but perhaps it's not necessary to be right up against it, and stability is more easily achieved by pulling back fractionally.
 
 == Problem (`batch_size_experiment`): Batch size variations (1 point)
 
 + \@TODO (variants I tried; learning curves; comments on findings)
 
+  #figure(
+    image("images/batch-size-variations.png"),
+    caption: "Batch size variations on TinyStories",
+  )
+
+  #link("https://api.wandb.ai/links/brandon-snider-stanford-university/nh2sr9uu", "WandB Report")
+
+  Findings:
+
+  - Throughput increases with batch size up to a point, after which it remains roughly flat despite increasing memory usage. At the smallest batch, training was extremely slow.
+  - Smaller batch sizes require lower learning rates to avoid divergence due to noisy gradients.
+  - There is a "sweet spot" range of batch sizes for a given token budget. Increasing batch size to the GPU limit (1024 in my case) degraded the quality of the final model, perhaps because there were too few gradient steps givne the fixed token budget.
+
+
 == Problem (`generate`): Generate text (1 point)
 
 + \@TODO (256-token output from TS model; comments on fluency and factors)
+
+  Decoding parameters:
+
+  `print(decode(model, tokenizer, "The", max_new_tokens=512, temperature=0.7, top_p=0.9))`
+
+  Generation:
+
+  #quote(block:true)[
+  The squirrel said, "Hello, little bird! I have something for you." The little bird was very excited and said, "Thank you, Mr. Squirrel! I want to know what it is!" The squirrel took out a small piece of paper and gave it to the little bird.
+
+  The little bird said, "This is a special paper. I will show you!" The squirrel took the paper and started to draw. The little bird was very happy to see the paper. The squirrel thanked the little bird and they became good friends. From that day on, they always played together in the forest, and the little bird always had a friend to help him when he needed it.
+  ]
+
+  Comments:
+
+  The generation is fluent and coherent, and would fit well in the TinyStories dataset.
+
+  Temperature and top_p work together to control the diversity and determinism of the generations.
+
+  With a fixed temperature (e.g. 0.7), `top_p`, a smaller `top_p` (e.g. 0.1) narrows the pool of candidate tokens, and the generations come out very similar each time. A larger `top_p` (e.g. 0.99) allows for more diversity, but the generations can become low quality, losing coherence.
+
+  With a fixed `top_p`, increasing `temperature` flattens the probability distribution over the tokens in the candidate pool, and diversity increases. Decreasing `temperature` concentrates the probability distribution, and diversity decreases.
+
+  With a well-balanced temperature and top_p, the pool of candidate tokens is large enough to allow for diversity, but the probability distribution is concentrated enough to select unusual tokens with low probability, so generations can be both diverse and coherent.
+
 
 == Problem (`layer_norm_ablation`): Remove RMSNorm and train (1 point)
 
 + \@TODO (learning curves at prev. optimal LR and new optimal LR; comments on diff.)
 
+  #figure(
+    image("images/ln-ablation.png"),
+    caption: "Layer norm ablation on TinyStories",
+  )
+
+  #link("https://api.wandb.ai/links/brandon-snider-stanford-university/0j2dyekh", "WandB Report")
+
+  Comments:
+
+  Removing RMSNorms dramatically decreases stability. At the previous optimal learning rate, the optimizer diverges almost immediately. By decreasing the learning rate by 90%, I was able to train for full token budget, but still had significant spikes in loss, and a lower-quality final model (eval loss of 1.57 vs 1.38).
+
+
 == Problem (`pre-norm_ablation`): Implement post-norm and train (1 point)
 
 + \@TODO (learning curves for post-norm compared to pre-norm; comments on diff.)
+
+  #figure(
+    image("images/pre-norm-ablation.png"),
+    caption: "Pre-norm vs. post-norm on TinyStories",
+  )
+
+  #link("https://api.wandb.ai/links/brandon-snider-stanford-university/3t2e9iph", "WandB Report")
+
+  Both training runs were quite stable. The pre-norm run produced a better final model (eval loss of 1.38 vs 1.44).
+
 
 == Problem (`no_pos_emb`): Implement NoPE (1 point)
 
 + \@TODO (learning curves comparing NoPE and RoPE; comments on diff.)
 
+  #figure(
+    image("images/rope-ablation.png"),
+    caption: "RoPE vs. NoPE on TinyStories",
+  )
+
+  #link("https://api.wandb.ai/links/brandon-snider-stanford-university/k3kefq9l", "WandB Report")
+
+  RoPE helps, but the model is able to learn without it. The final loss is is not as good, perhaps because the ability to learn relationships that depend on knowledge of relative position is hampered. The final model with RoPE has eval loss of 1.38 vs 1.43 for the NoPE model.
+
+
 == Problem (`swiglu_ablation`): SwiGLU vs SiLU (1 point)
 
 + \@TODO (learning curves comparing SwiGLU and SiLU; few sentences on findings)
 
+  #figure(
+    image("images/swiglu-ablation.png"),
+    caption: "SwiGLU vs. SiLU on TinyStories",
+  )
+
+  #link("https://api.wandb.ai/links/brandon-snider-stanford-university/9az6yw1v", "WandB Report")
+
+  Comments:
+
+  The two MLP variants perform almost identically, with SiLU actually producing every so slightly better eval loss (1.37 vs 1.38). My guess is that on a model and dataset of this size, this fairly small architectural difference is not particularly significant, and that observed differences at larger scaled just don't fully translate to these conditions.
+
+
 == Problem (`main_experiment`): Experiment on OWT (2 points)
 
 + \@TODO (learning curve on OWT; diff. from TS + interpretation; generation+ comments)
+
+  #figure(
+    image("images/owt-baseline.png"),
+    caption: "OpenWebText Learning Curve",
+  )
+
+  #link("https://api.wandb.ai/links/brandon-snider-stanford-university/mk12bd50", "WandB Report")
+
+  Comments:
+
+  Both training and validation losses are much higher than TinyStories (eval loss was 4.03 on OWT vs 1.38 on TinySTories). Concretely, that the probabilit distribution output by the model less closely matches the target distribution for the model trained on OWT compared to the model trained on TinyStories. More interpretively, the model trained on OWT has not learned the dataset as well as the model trained on TinyStories, so we should expect lower-quality generations.
+
+  Generation Prompt:
+
+  `print(decode(model, tokenizer, "The", max_new_tokens=512, temperature=0.7, top_p=0.9))`
+
+  Completion:
+
+  #quote(block:true)[
+  The 'King of the Mavs' is a reference to the "King of the Mavs" of the Mavs, who were the two sons of the two brothers who are the ones who were a group of people, and the other the siblings, that they were part of the family. The two brothers are a man who was also the daughter of a man who was the first person who was a boy and was the first person to marry him.
+
+  The son of the Mavs was born in the town of Mavs who was a man of honour. He was a woman who had been named the father of the Mavs who had been a boy in the Kiwi home in Sikuya, and the daughter of a grandfather who had been a child of a child.
+
+  The son of a girl of the family is a woman of two. The family was also named as the daughter of the son of the daughter of the boy, who had been born in the same family.
+
+  The family is named after the Sultan of Mavs' son of Ravi, the son of a prince, who has been a household name for three years.
+
+  The father of the boy, who had been a father of two sisters of his son, who lived in Sikuya, an uncle of his uncle and his mother, and two cousins of his father, Josephine, and daughter of Prince of Mavs.
+
+  The son of Mavs' son, the daughter of a child of a man who had been a father of two and a half years old, was a mother of three. He was a father of four.
+
+  The son of the daughter of the prince, the daughter of the son of a child who was born in the mother of the father, was also a father of two siblings of the same family.
+
+  "He was born in the father of the father of the son of the son of his brother, the son of a man of the family," the elder son said.
+
+  "He was born in the family in the family and from his father, his parents. He had his father, the son of a grandfather, his father and his father. He was the father of the family. He was the father of the son of the king of the grandfather of the son of the King. He had a son of the King of the son of his father. He was a man of the father of his mother, who
+  ]
+
+  The completion looks a bit like English, but is not coherent. This is expected, given that the model has not learned the dataset as well as the model trained on TinyStories. With a larger and more diverse dataset, the model would need to be trained for longer to learn the distribution well. Additionally, the OpenWebText dataset is much noisier than TinyStories, which hinders learning, and further increases the FLOPs that would be required to train a usable model on it.
 
 == Problem (`leaderboard`): Leaderboard (6 points)
 
