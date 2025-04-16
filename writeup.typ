@@ -35,16 +35,23 @@
 
 == Problem (`train_bpe_tinystories`): BPE Training on TinyStories (2 points)
 
-+ Time: 135.32s (0.038h) \
-  Memory: 4GB (per Scalene) \
++ Time: 135.32s (0.038h)
+
+  Memory: 4GB (per Scalene)
+  
   Longest token: `' accomplishment'`. This makes sense. With a fairly large vocabulary and a dataset of clean English text, one would expect the longest tokens to be long strings of valid English that appear contiguously in the dataset.
 
 + Pre-tokenization took roughly half of the overall training time (102s). The specific bottleneck is creating a bytes object for each individual character in each regex match to construct the keys in the table of coarse-grained tokens.
 
 == Problem (`train_bpe_expts_owt`): BPE Training on OpenWebText (2 points)
 
-+ Longest token: `b'\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82'
-` which decodes to `ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ`
++ Longest token:
+
+  `b'\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83
+\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83
+\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82'`
+
+  Which decodes to `ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ`
   
   This makes sense. This repeated pattern is common when documents are double-encoded or improperly decoded, which is common in scraped web content. In fact, this exact byte sequence appear over 4,500 times in the OWT training set.
   
@@ -53,9 +60,11 @@
 == Problem (`tokenizer_experiments`): Experiments with Tokenizers (4 points)
 
 + TinyStories tokenizer compression ratio (bytes/token): $4.01$
+
   OpenWebText tokenizer compression ratio (bytes/token): $4.50$
 
 + OpenWebText sample, tokenized with TinyStories tokenizer: $3.40$
+
   The compression ratio is significantly worse than the compression ratio that the same tokenizer achieves on a sample of data from the same distribution on which the tokenizer was trained. Specifically, the OpenWebText/TinyStories compression ratio is $~85%$ of the TinyStories/TinyStories compression ratio.
 
 + $"Throughput" approx 6.8 times 10^6 "bytes/second" = 6.8 "MB/second"$
@@ -418,7 +427,7 @@ For learning rates of 1, 1e1, and 1e2, the loss decreases more quickly as the le
   *Activation Memory*
 
   Each transformer block:
-  - RMSNorm results: $2 times B times T times d $
+  - Two RMSNorms: $2 times B times T times d $
   - MHA:
     - QKV projections: $3 times B times T times d$
     - Attention scores ($Q^T K$): $B times h times T times T$
@@ -520,9 +529,7 @@ For learning rates of 1, 1e1, and 1e2, the loss decreases more quickly as the le
 
 == Problem (`batch_size_experiment`): Batch size variations (1 point)
 
-+ \@TODO (variants I tried; learning curves; comments on findings)
-
-  #figure(
++ #figure(
     image("images/batch-size-variations.png"),
     caption: "Batch size variations on TinyStories",
   )
@@ -538,9 +545,7 @@ For learning rates of 1, 1e1, and 1e2, the loss decreases more quickly as the le
 
 == Problem (`generate`): Generate text (1 point)
 
-+ \@TODO (256-token output from TS model; comments on fluency and factors)
-
-  Decoding parameters:
++ Decoding parameters:
 
   `print(decode(model, tokenizer, "The", max_new_tokens=512, temperature=0.7, top_p=0.9))`
 
@@ -567,9 +572,7 @@ For learning rates of 1, 1e1, and 1e2, the loss decreases more quickly as the le
 
 == Problem (`layer_norm_ablation`): Remove RMSNorm and train (1 point)
 
-+ \@TODO (learning curves at prev. optimal LR and new optimal LR; comments on diff.)
-
-  #figure(
++ #figure(
     image("images/ln-ablation.png"),
     caption: "Layer norm ablation on TinyStories",
   )
@@ -583,9 +586,7 @@ For learning rates of 1, 1e1, and 1e2, the loss decreases more quickly as the le
 
 == Problem (`pre-norm_ablation`): Implement post-norm and train (1 point)
 
-+ \@TODO (learning curves for post-norm compared to pre-norm; comments on diff.)
-
-  #figure(
++ #figure(
     image("images/pre-norm-ablation.png"),
     caption: "Pre-norm vs. post-norm on TinyStories",
   )
@@ -597,9 +598,7 @@ For learning rates of 1, 1e1, and 1e2, the loss decreases more quickly as the le
 
 == Problem (`no_pos_emb`): Implement NoPE (1 point)
 
-+ \@TODO (learning curves comparing NoPE and RoPE; comments on diff.)
-
-  #figure(
++ #figure(
     image("images/rope-ablation.png"),
     caption: "RoPE vs. NoPE on TinyStories",
   )
@@ -611,9 +610,7 @@ For learning rates of 1, 1e1, and 1e2, the loss decreases more quickly as the le
 
 == Problem (`swiglu_ablation`): SwiGLU vs SiLU (1 point)
 
-+ \@TODO (learning curves comparing SwiGLU and SiLU; few sentences on findings)
-
-  #figure(
++ #figure(
     image("images/swiglu-ablation.png"),
     caption: "SwiGLU vs. SiLU on TinyStories",
   )
@@ -627,9 +624,7 @@ For learning rates of 1, 1e1, and 1e2, the loss decreases more quickly as the le
 
 == Problem (`main_experiment`): Experiment on OWT (2 points)
 
-+ \@TODO (learning curve on OWT; diff. from TS + interpretation; generation+ comments)
-
-  #figure(
++ #figure(
     image("images/owt-baseline.png"),
     caption: "OpenWebText Learning Curve",
   )
