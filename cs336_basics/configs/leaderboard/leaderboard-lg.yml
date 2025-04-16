@@ -18,6 +18,7 @@ model:
   ffn_type: "swiglu"
   # ffn_type: "silu"
   attn_impl: "normal" 
+  embedding_std: 0.02
 
 optimizer:
   lr: 5.0e-4
@@ -33,16 +34,34 @@ optimizer:
 training:
   batch_size: 128
   max_steps: 16_000
-  # max_steps: 1
   eval_interval: 2_000
   eval_steps: 25
-  # eval_steps: 1
   eval_batch_size: 128
   checkpoint_interval: 15_000
-  # max_l2_norm: 1.0
-  lr_max: 5.0e-4
-  lr_min: 1.7e-4
+  max_l2_norm: 1.0
+
+  # # Cosine LR schedule
+  lr_schedule: "cosine"
+  lr_max: 4.0e-4
+  lr_min: 1.6e-4
   warmup_ratio: 0.01
-  cosine_cycle_iters: 18_000
+  cosine_cycle_iters: 16_000
+
+  # # Linear LR schedule
   # lr_schedule: "linear"
-  # linear_cycle_iters: 16_000
+  # lr_max: 5.0e-4
+  # lr_min: 1.8e-4
+  # warmup_ratio: 0.03
+  # linear_cycle_iters: 13_000
+
+  # Double LR schedule
+  # lr_schedule: "double"
+  # lr_max: 1.5e-3
+  # lr_inter: 6.0e-4
+  # lr_min: 2.0e-4
+  # warmup_iters: 200
+  # exp_decay_iters: 1_500 # iter at which to hit lr_inter
+  # phase_two_iters: 13_000 # iter at which to hit lr_min
+  # phase_two_type: "linear"
+
+  # device: "cuda:7" # prefer setting device in command line

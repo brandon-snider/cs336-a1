@@ -114,8 +114,6 @@ class CausalMultiHeadSelfAttention(torch.nn.Module):
         mask = ~torch.triu(torch.ones((seq_len, seq_len), device=x.device, dtype=torch.bool), diagonal=1)
 
         y = scaled_dot_product_attention(q, k, v, mask)
-
-        # Reshape back from (batch, heads, seq_len, head_dim) to (batch, seq_len, dim)
         y = rearrange(y, "b h s d -> b s (h d)")
         return self.output_proj(y)
 
@@ -210,6 +208,7 @@ class Embedding(torch.nn.Module):
         embedding_dim: int,
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
+        **kwargs,
     ):
         super().__init__()
 
@@ -217,6 +216,9 @@ class Embedding(torch.nn.Module):
         std = 1
         lower = -3
         upper = 3
+
+        if kwargs.get("embedding_std", None) is not None:
+            std = kwargs.get("embedding_std")
 
         w = torch.empty((num_embeddings, embedding_dim), device=device, dtype=dtype)
         torch.nn.init.trunc_normal_(w, mean=mean, std=std, a=lower, b=upper)
@@ -244,7 +246,7 @@ class Transformer(torch.nn.Module):
         super().__init__()
 
         self.context_length = context_length
-        self.token_embeddings = Embedding(vocab_size, d_model, device, dtype)
+        self.token_embeddings = Embedding(vocab_size, d_model, device, dtype, **kwargs)
 
         if d_model % num_heads != 0:
             raise ValueError("d_model must be divisible by num_heads")

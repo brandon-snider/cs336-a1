@@ -35,7 +35,7 @@ class Transformer(torch.nn.Module):
         self.lm_head = Linear(d_model, vocab_size, device, dtype)
 
         if kwargs.get("weight_tying", False):
-            self.token_embeddings.weight = self.lm_head.weight
+            self.lm_head.weight = self.token_embeddings.weight
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.token_embeddings(x)

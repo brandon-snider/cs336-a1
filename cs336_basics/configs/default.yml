@@ -39,6 +39,7 @@ optimizer:
 # e.g. 64 * 20_000 * 256 = 327,680,000
 # e.g. 128 * 10_000 * 256 = 327,680,000
 training:
+  grad_accum_steps: 1
   batch_size: 128
   max_steps: 10_000
   eval_before_training: false
@@ -47,7 +48,16 @@ training:
   eval_batch_size: 128
   checkpoint_interval: 10_000
   max_l2_norm: 1.0
+  lr_schedule: "cosine" # "cosine", "linear", "double"
   lr_max: 6.0e-3
   lr_min: 0
-  warmup_ratio: 0.05
-  lr_schedule: "cosine"
+  warmup_ratio: 0.01 # Only used if `warmup_iters` is not set
+
+  # Only used with other LR schedules
+  lr_inter: False # unused with cosine schedule
+  warmup_iters: False # overrides `warmup_ratio` if set in inheriting config
+  cosine_cycle_iters: False
+  linear_cycle_iters: False
+  exp_decay_iters: False
+  phase_two_iters: False
+  phase_two_type: "linear"

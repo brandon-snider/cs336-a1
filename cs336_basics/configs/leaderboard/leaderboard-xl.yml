@@ -7,42 +7,71 @@ data:
   valid_data_path: "/data/c-sniderb/tokens/owt-valid/tokens.bin"
 
 model:
+  # d_model: 1280
+  # d_ff: 3456
+
   d_model: 1280
-  d_ff: 3456
+  d_ff: 5120
+  num_layers: 10
+
+  # d_model: 1536
+  # d_ff: 6144
+  # num_layers: 10
+
+  # d_model: 1024
   # d_ff: 4096
   num_heads: 16
-  num_layers: 12
+  # num_layers: 12
   context_length: 512
   vocab_size: 32_000
   weight_tying: true
   ffn_type: "swiglu"
   # ffn_type: "silu"
   attn_impl: "normal" 
-
+  embedding_std: 0.02
+  
 optimizer:
-  lr: 5.0e-4
+  lr: 4.0e-4
   betas: [0.9, 0.95]
   eps: 1.0e-8
-  weight_decay: 0.001
+  weight_decay: 0
 
 # Total tokens = batch_size * max_steps * context_length
-# 128 * 13_000 * 512 = 851,968,000 = 0.851B
-# Required throughput = 0.851B tokens / 5400s = 157k tokens/s
-# Current empirical throughput: 164k tokens/s (max. 885M = 0.885B total)
+# 128 * 14_000 * 512 = 917,504,000 = 0.917B
+# Required throughput = 0.917B tokens / 5400s = 170k tokens/s
+# Current empirical throughput: 182k tokens/s (max. 982M = 0.982B total)
 
 training:
   batch_size: 128
-  max_steps: 13_000
-  # max_steps: 1
-  eval_interval: 2600
+  max_steps: 14_000
+  eval_interval: 2800
   eval_steps: 25
-  # eval_steps: 1
   eval_batch_size: 128
-  checkpoint_interval: 15_000
-  # max_l2_norm: 1.0
+  checkpoint_interval: 14_000
+  max_l2_norm: 1.0
+
+  # # Cosine LR schedule
+  # lr_schedule: "cosine"
+  # lr_max: 5.0e-3
+  # lr_min: 2.0e-4
+  # warmup_ratio: 0.01
+  # cosine_cycle_iters: 15_000
+
+  # # Linear LR schedule
+  lr_schedule: "linear"
   lr_max: 5.0e-4
-  lr_min: 1.7e-4
+  lr_min: 1.8e-4
   warmup_ratio: 0.01
-  cosine_cycle_iters: 15_000
-  # lr_schedule: "linear"
-  # linear_cycle_iters: 13_000
+  linear_cycle_iters: 14_000
+
+  # Double LR schedule
+  # lr_schedule: "double"
+  # lr_max: 1.5e-3
+  # lr_inter: 6.0e-4
+  # lr_min: 2.0e-4
+  # warmup_iters: 200
+  # exp_decay_iters: 1_500 # iter at which to hit lr_inter
+  # phase_two_iters: 14_000 # iter at which to hit lr_min
+  # phase_two_type: "linear"
+
+  device: "cuda:5" # prefer setting device in command line

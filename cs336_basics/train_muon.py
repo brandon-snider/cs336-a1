@@ -17,7 +17,7 @@ from cs336_basics.checkpointing import save_checkpoint, load_checkpoint
 from cs336_basics.data_loader import get_batch
 from cs336_basics.loss import cross_entropy_loss
 from cs336_basics.gradient_clip import gradient_clip
-from cs336_basics.lr_cosine_schedule import lr_cosine_schedule
+from cs336_basics.lr_schedule import lr_cosine_schedule
 
 
 class Logger:

@@ -32,8 +32,15 @@ def get_batch(x: np.ndarray, batch_size: int, context_length: int, device: str):
         x_sequences[i] = x[start_idx : start_idx + context_length]
         y_sequences[i] = x[start_idx + 1 : start_idx + context_length + 1]
 
-    # Convert to tensors once and move to device in a single operation
-    x_batch = torch.from_numpy(x_sequences).to(device)
-    y_batch = torch.from_numpy(y_sequences).to(device)
+    x_batch = torch.from_numpy(x_sequences)
+    y_batch = torch.from_numpy(y_sequences)
+
+    if device.startswith("cuda"):
+        x_batch, y_batch = (
+            x_batch.pin_memory().to(device, non_blocking=True),
+            y_batch.pin_memory().to(device, non_blocking=True),
+        )
+    else:
+        x_batch, y_batch = x_batch.to(device), y_batch.to(device)
 
     return x_batch, y_batch

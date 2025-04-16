@@ -7,41 +7,42 @@ data:
   valid_data_path: "/data/c-sniderb/tokens/owt-valid/tokens.bin"
 
 model:
-  d_model: 896
-  d_ff: 2368
+  d_model: 1024
+  d_ff: 2688
   # d_ff: 4096
-  num_heads: 14
-  num_layers: 12
+  num_heads: 16
+  num_layers: 14
   context_length: 512
   vocab_size: 32_000
   weight_tying: true
   ffn_type: "swiglu"
   # ffn_type: "silu"
   attn_impl: "normal" 
-  embedding_std: 0.02
 
 optimizer:
   lr: 5.0e-4
   betas: [0.9, 0.95]
   eps: 1.0e-8
-  weight_decay: 0.1
+  weight_decay: 0.001
 
 # Total tokens = batch_size * max_steps * context_length
-# 128 * 17_500 * 512 = 1,120,000,000 = 1.120B
-# Required throughput = 1.120B tokens / 5400s = 207k tokens/s
-# Current empirical throughput: 220k tokens/s (max. 1,188,000,000 = 1.188B total)
+# 128 * 14_000 * 512 = 917,504,000 = 0.917B
+# Required throughput = 0.917B tokens / 5400s = 170k tokens/s
+# Current empirical throughput: 180k tokens/s (max. 972M = 0.972B total)
 
 training:
   batch_size: 128
-  max_steps: 17_500
-  eval_interval: 1750
-  eval_steps: 30
+  max_steps: 16_000
+  # max_steps: 1
+  eval_interval: 2_000
+  eval_steps: 25
+  # eval_steps: 1
   eval_batch_size: 128
-  checkpoint_interval: 17_500
-  max_l2_norm: 1.0
+  checkpoint_interval: 15_000
+  # max_l2_norm: 1.0
   lr_max: 5.0e-4
   lr_min: 1.8e-4
   warmup_ratio: 0.01
-  # cosine_cycle_iters: 8250 # hack to change shape of cosine schedule
+  cosine_cycle_iters: 15_000
   # lr_schedule: "linear"
-  # linear_cycle_iters: 17_500 # defaults to max_steps - warmup_iters
+  # linear_cycle_iters: 16_000

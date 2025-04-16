@@ -9,4 +9,4 @@
 #SBATCH --error=train_leaderboard_%j.err
 
 uv run -m cs336_basics.train \
-		--config cs336_basics/configs/leaderboard/leaderboard-xl.yml
+		--config cs336_basics/configs/leaderboard/leaderboard-lg-deep.yml

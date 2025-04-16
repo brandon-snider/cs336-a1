@@ -12,13 +12,12 @@ import wandb
 
 from cs336_basics.adamw import AdamW
 from cs336_basics.checkpointing import save_checkpoint, load_checkpoint
-from cs336_basics.lr_linear_schedule import lr_linear_schedule
+from cs336_basics.lr_schedule import lr_linear_schedule
 from cs336_basics.model import Transformer
-from cs336_basics.modded import Transformer as TransformerModded
 from cs336_basics.data_loader import get_batch
 from cs336_basics.loss import cross_entropy_loss
 from cs336_basics.gradient_clip import gradient_clip
-from cs336_basics.lr_cosine_schedule import lr_cosine_schedule
+from cs336_basics.lr_schedule import lr_cosine_schedule, lr_double_schedule
 
 
 class Logger:
@@ -105,18 +104,14 @@ def load_config(config_path: str | None = None, base_config: dict | None = None)
 
     config["run"]["run_id"] = config["run"]["run_id"].replace("<timestamp>", f"{int(time.time())}")
 
-    config["training"]["warmup_iters"] = int(config["training"]["warmup_ratio"] * config["training"]["max_steps"])
-
-    if config["training"].get("cosine_cycle_iters", None) is None:
-        config["training"]["cosine_cycle_iters"] = config["training"]["max_steps"] - config["training"]["warmup_iters"]
-
-    if config["training"].get("linear_cycle_iters", None) is None:
-        config["training"]["linear_cycle_iters"] = config["training"]["max_steps"] - config["training"]["warmup_iters"]
-
     # Detect device and dtype at runtime
     device = "cpu"
     if torch.cuda.is_available():
-        device = "cuda"
+        if config["training"].get("device", None) is not None:
+            device = config["training"]["device"]
+            print(f"Using device: {device}")
+        else:
+            device = "cuda"
     elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
         device = "mps"
     dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
@@ -183,18 +178,26 @@ def train(config: Config | None = None):
     valid_data = np.memmap(config.data.valid_data_path, dtype=np.uint16, mode="r")
 
     # Initialize model
-    # @TODO — set to Transformer before submitting
-    model = TransformerModded(**config.model, device=device, dtype=dtype)
+    model = Transformer(**config.model, device=device, dtype=dtype)
     model.to(device)
 
-    print(f"Total params: {sum(p.numel() for p in model.parameters())}")
     print(f"Trainable params: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
 
-    # return
+    # Only decay 2D parameters (i.e. not layernorms)
+    param_dict = {pn: p for pn, p in model.named_parameters() if p.requires_grad}
+    decay_params = [p for n, p in param_dict.items() if p.dim() >= 2]
+    nodecay_params = [p for n, p in param_dict.items() if p.dim() < 2]
+    optim_groups = [
+        {"params": decay_params, **config.optimizer},
+        {"params": nodecay_params, **config.optimizer, "weight_decay": 0.0},
+    ]
+    num_decay_params = sum(p.numel() for p in decay_params)
+    num_nodecay_params = sum(p.numel() for p in nodecay_params)
+    print(f"Decayed parameter tensors: {len(decay_params)}, with {num_decay_params:,} parameters")
+    print(f"Non-decayed parameter tensors: {len(nodecay_params)}, with {num_nodecay_params:,} parameters")
 
-    optimizer = AdamW(model.parameters(), **config.optimizer)
-    # @TODO — remove before submitting
-    # optimizer = torch.optim.AdamW(model.parameters(), **config.optimizer)
+    optimizer = AdamW(optim_groups, **config.optimizer)
+    # optimizer = AdamW(model.parameters(), **config.optimizer)
 
     # Load checkpoint if resuming
     if resuming:
@@ -212,14 +215,33 @@ def train(config: Config | None = None):
 
     max_steps = config.training.max_steps
     batch_size = config.training.batch_size
-    lr_max = config.training.lr_max
-    lr_min = config.training.lr_min
-    warmup_iters = config.training.warmup_iters
-    cosine_cycle_iters = config.training.cosine_cycle_iters
-    linear_cycle_iters = config.training.linear_cycle_iters
     max_l2_norm = config.training.max_l2_norm
     eval_interval = config.training.eval_interval
     checkpoint_interval = config.training.checkpoint_interval
+    grad_accum_steps = config.training.grad_accum_steps
+
+    lr_max = config.training.lr_max
+    lr_inter = config.training.lr_inter
+    lr_min = config.training.lr_min
+    warmup_ratio = config.training.warmup_ratio
+    warmup_iters = config.training.warmup_iters
+    exp_decay_iters = config.training.exp_decay_iters
+    phase_two_iters = config.training.phase_two_iters
+    phase_two_type = config.training.phase_two_type
+    cosine_cycle_iters = config.training.cosine_cycle_iters
+    linear_cycle_iters = config.training.linear_cycle_iters
+
+    if warmup_iters is False or warmup_iters is None:
+        warmup_iters = int(warmup_ratio * max_steps)
+
+    if cosine_cycle_iters is False or cosine_cycle_iters is None:
+        cosine_cycle_iters = max_steps
+
+    if linear_cycle_iters is False or linear_cycle_iters is None:
+        linear_cycle_iters = max_steps
+
+    if phase_two_iters is False or phase_two_iters is None:
+        phase_two_iters = max_steps
 
     def evaluate(step: int, is_last_step: bool):
         n_eval_steps = config.training.eval_steps
@@ -228,6 +250,7 @@ def train(config: Config | None = None):
             n_eval_steps = n_eval_steps * 3
 
         model.eval()
+
         with torch.no_grad():
             val_loss = 0.0
             for _ in range(n_eval_steps):
@@ -259,35 +282,48 @@ def train(config: Config | None = None):
         logger.log_info(display_metrics)
         logger.log_metrics(metrics)
 
+        model.train()
+
     # Only evaluate before training if not resuming
     if config.training.eval_before_training and not resuming:
         evaluate(0)
 
+    x, y = get_batch(train_data, batch_size, config.model.context_length, device)
+
+    model.train()
+
     for step in range(start_step, max_steps + 1):
         t0 = time.time()
         is_last_step = step == max_steps
+        loss_accum = 0.0
 
-        model.train()
-        optimizer.zero_grad()
+        for _ in range(grad_accum_steps):
+            with torch.autocast(device_type=device, dtype=dtype):
+                logits = model(x)
 
-        x, y = get_batch(train_data, batch_size, config.model.context_length, device)
+            loss = cross_entropy_loss(logits, y) / grad_accum_steps
 
-        with torch.autocast(device_type=device, dtype=dtype):
-            logits = model(x)
-        loss = cross_entropy_loss(logits, y)
+            x, y = get_batch(train_data, batch_size, config.model.context_length, device)
 
-        loss.backward()
-        norm = gradient_clip(model.parameters(), max_l2_norm)  # norm before clipping
+            loss_accum += loss.detach()
+            loss.backward()
+
+        norm = gradient_clip(model.parameters(), max_l2_norm)
 
         if config.training.lr_schedule == "linear":
             lr = lr_linear_schedule(step, lr_max, lr_min, warmup_iters, linear_cycle_iters)
-        else:
+        elif config.training.lr_schedule == "cosine":
             lr = lr_cosine_schedule(step, lr_max, lr_min, warmup_iters, cosine_cycle_iters)
+        elif config.training.lr_schedule == "double":
+            lr = lr_double_schedule(
+                step, lr_max, lr_inter, lr_min, warmup_iters, exp_decay_iters, phase_two_iters, phase_two_type
+            )
 
         for param_group in optimizer.param_groups:
             param_group["lr"] = lr
 
         optimizer.step()
+        optimizer.zero_grad(set_to_none=True)
 
         if device == "cuda":
             torch.cuda.synchronize()
@@ -296,14 +332,14 @@ def train(config: Config | None = None):
 
         t1 = time.time()
         dt = t1 - t0
-        tokens_per_sec = config.model.context_length * batch_size / dt
-        train_loss = loss.item()
+        tokens_per_sec = config.model.context_length * batch_size * grad_accum_steps / dt
+        train_loss = loss_accum.item()
         progress_str = get_progress_str(step, max_steps)
 
         # Log training metrics
         metrics = {
-            "train/loss": loss,
-            "train/perplexity": get_perplexity(loss),
+            "train/loss": train_loss,
+            "train/perplexity": get_perplexity(train_loss),
             "train/lr": lr,
             "train/grad_norm": norm,
             "train/tokens_per_sec": tokens_per_sec,
@@ -322,9 +358,6 @@ def train(config: Config | None = None):
             "tok/sec": f"{int(tokens_per_sec):,}",
             "dt": f"{dt * 1000:.2f}ms",
         }
-
-        # if step == 1 or step % 10 == 0 or is_last_step:
-        #     logger.log_info(display_metrics)
 
         logger.log_info(display_metrics)
         logger.log_metrics(metrics)

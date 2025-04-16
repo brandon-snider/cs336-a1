@@ -12,18 +12,15 @@ from torch import Tensor
 
 import cs336_basics.adamw
 import cs336_basics.loss
-import cs336_basics.lr_cosine_schedule
+import cs336_basics.lr_schedule
 import cs336_basics.train_bpe
 import cs336_basics.data_loader
 import cs336_basics.checkpointing
 import cs336_basics.tokenizer
 import cs336_basics.gradient_clip
 import cs336_basics.model
-import cs336_basics.modded
 
-# @TODO — set to .moddel before submitting
-# model_base = cs336_basics.model
-model_base = cs336_basics.modded
+model_base = cs336_basics.model
 
 
 def _merge_attention_weights(weights: dict[str, Tensor]) -> dict[str, Tensor]:
@@ -576,7 +573,7 @@ def run_get_lr_cosine_schedule(
     Returns:
         Learning rate at the given iteration under the specified schedule.
     """
-    return cs336_basics.lr_cosine_schedule.lr_cosine_schedule(
+    return cs336_basics.lr_schedule.lr_cosine_schedule(
         it, max_learning_rate, min_learning_rate, warmup_iters, cosine_cycle_iters
     )
 
