@@ -236,7 +236,7 @@ def train(config: Config | None = None):
                     logits = model(x)
                 loss = cross_entropy_loss(logits, y)
                 val_loss += loss.item()
-            val_loss /= config.training.eval_steps
+            val_loss /= n_eval_steps
 
         progress_str = get_progress_str(step, max_steps)
 

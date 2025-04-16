@@ -21,9 +21,9 @@ model:
 
 optimizer:
   lr: 5.0e-4
-  betas: [0.9, 0.98]
+  betas: [0.9, 0.95]
   eps: 1.0e-8
-  weight_decay: 0.01
+  weight_decay: 0.001
 
 # Total tokens = batch_size * max_steps * context_length
 # 128 * 16_000 * 512 = 1,048,576,000 = 1.048B
@@ -41,8 +41,8 @@ training:
   checkpoint_interval: 15_000
   # max_l2_norm: 1.0
   lr_max: 5.0e-4
-  lr_min: 1.8e-4
+  lr_min: 1.7e-4
   warmup_ratio: 0.01
-  # cosine_cycle_iters: 16_000
+  cosine_cycle_iters: 18_000
   # lr_schedule: "linear"
-  linear_cycle_iters: 16_000
+  # linear_cycle_iters: 16_000

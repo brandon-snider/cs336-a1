@@ -1,6 +1,6 @@
 import torch
 from cs336_basics.tokenizer import Tokenizer
-from cs336_basics.transformer import Transformer
+from cs336_basics.model import Transformer
 
 
 def decode(
