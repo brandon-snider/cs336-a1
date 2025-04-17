@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 
-# Make sure the script stops at the first error
 set -e
 
-LR_VALUES=(1e-4 3e-4 1e-3 3e-3 1e-2 3e-2)
+LR_VALUES=(1e-5 1e-4 1e-3 1e-2)
 
 for LR in "${LR_VALUES[@]}"
 do

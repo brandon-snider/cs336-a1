@@ -34,6 +34,10 @@ zip -r "$output_file" . \
     -x '*.npz' \
     -x '*.bin' \
     -x '*.png' \
+    -x '*.typ' \
+    -x '*.pdf' \
+    -x '*.ipynb' \
+    -x '*.zip' \
     -x 'out/*' \
     -x 'images/*'
 

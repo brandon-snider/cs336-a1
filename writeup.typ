@@ -33,29 +33,46 @@
 
 + `0x80 0x80`, because `0x80` (equivalently `10000000`) is a continuation byte, and cannot be used as the first byte in a unicode sequence.
 
+== Problem (`train_bpe`): BPE Tokenizer Training (15 points)
+
+See `cs336_basics/train_bpe.py`
+
 == Problem (`train_bpe_tinystories`): BPE Training on TinyStories (2 points)
 
-+ Time: 135.32s (0.038h) \
-  Memory: 4GB (per Scalene) \
++ Time: 135.32s (0.038h)
+
+  Memory: 4GB (per Scalene)
+
   Longest token: `' accomplishment'`. This makes sense. With a fairly large vocabulary and a dataset of clean English text, one would expect the longest tokens to be long strings of valid English that appear contiguously in the dataset.
 
 + Pre-tokenization took roughly half of the overall training time (102s). The specific bottleneck is creating a bytes object for each individual character in each regex match to construct the keys in the table of coarse-grained tokens.
 
 == Problem (`train_bpe_expts_owt`): BPE Training on OpenWebText (2 points)
 
-+ Longest token: `b'\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82'
-` which decodes to `ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ`
++ Longest token: 
+
+  `b'\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82
+\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82
+\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82'
+`
+  which decodes to `ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ`
   
   This makes sense. This repeated pattern is common when documents are double-encoded or improperly decoded, which is common in scraped web content. In fact, this exact byte sequence appear over 4,500 times in the OWT training set.
   
 + The OpenWebText tokenizer achieves a greater compression ratio, but with the tradeoff of having a much larger vocabulary size that enables it to capture domain-specific patterns and web content artifacts. The TinyStories tokenizer specializes in clean, simple English, reflecting the characteristics of its clean, narrow training set in contrast to the diverse, noisy content from the broader internet.
 
+== Problem (`tokenizer`):  Implementing the tokenizer (15 points)
+
+See `cs336_basics/tokenizer.py`
+
 == Problem (`tokenizer_experiments`): Experiments with Tokenizers (4 points)
 
 + TinyStories tokenizer compression ratio (bytes/token): $4.01$
+
   OpenWebText tokenizer compression ratio (bytes/token): $4.50$
 
 + OpenWebText sample, tokenized with TinyStories tokenizer: $3.40$
+
   The compression ratio is significantly worse than the compression ratio that the same tokenizer achieves on a sample of data from the same distribution on which the tokenizer was trained. Specifically, the OpenWebText/TinyStories compression ratio is $~85%$ of the TinyStories/TinyStories compression ratio.
 
 + $"Throughput" approx 6.8 times 10^6 "bytes/second" = 6.8 "MB/second"$
@@ -65,6 +82,46 @@
 + `uint16` is appropriate because of our vocabulary sizes. Both vocabulary sizes are $> 2^8$ and $< 2^16$. This means we can't use an 8-bit representation (we'd have token IDs greater than the representation can store) and we don't need more than a 16-bit representation (all token IDs can be expressed in a 16-bit representation). `uint16` is therefore the most memory-efficient choice.
 
 = 3. Transformer Language Model Architecture
+
+== Problem (`linear`): Implementing the linear module (1 point)
+
+See `Linear` class in `cs336_basics/model.py`
+
+== Problem (`embedding`): Implementing the embedding module (1 point)
+
+See `Embedding` class in `cs336_basics/model.py`
+
+== Problem (`rms_norm`): Root Mean Square Layer Normalization (1 point)
+
+See `RMSNorm` class in `cs336_basics/model.py`
+
+== Problem (`positionwise_feedforward`): Position-wise FFN (2 points)
+
+See `SwiGLU` class in `cs336_basics/model.py`
+
+== Problem (`rope`): Implement RoPE (2 point)
+
+See `RotaryPositionalEmbedding` class in `cs336_basics/model.py`
+
+== Problem (`softmax`): Implement softmax (1 point)
+
+See `softmax` function in `cs336_basics/model.py`
+
+== Problem (`scaled_dot_product_attention`): Implement scaled dot-product attention (5 points)
+
+See `scaled_dot_product_attention` function in `cs336_basics/model.py`
+
+== Problem (`multihead_self_attention`): Implement causal multi-head self-attention (5 points)
+
+See `CausalMultiHeadSelfAttention` class in `cs336_basics/model.py`
+
+== Problem (`transformer_block`): Implement the transformer block (3 points)
+
+See `Block` class in `cs336_basics/model.py`
+
+== Problem  (`transformer_lm`): Implement the Transformer LM (3 points)
+
+See `Transformer` class in `cs336_basics/model.py`
 
 == Problem (`transformer_accounting`): LM resource accounting (5 points)
 
@@ -369,9 +426,17 @@ $
 
 = 4. Training a Transformer LM
 
+== Problem (`cross_entropy`): Implement cross entropy (2 points)
+
+See `cross_entropy_loss` function in `cs336_basics/loss.py`
+
 == Problem (`learning_rate_tuning`): Tuning the learning rate (1 point)
 
 For learning rates of 1, 1e1, and 1e2, the loss decreases more quickly as the learning rate is increased (reaching ~23.0 with lr=1, and ~10^-23 with lr=100). With a learning rate of 1e3, the loss diverges, reaching ~10^18 by iteration 10, indicating too large a learning rate.
+
+== Problem (`adamw`): Implement AdamW (2 points)
+
+See `AdamW` class in `cs336_basics/adamw.py`
 
 == Problem (`adamwAccounting`): Resource accounting for AdamW (2 points)
 
@@ -487,7 +552,43 @@ For learning rates of 1, 1e1, and 1e2, the loss decreases more quickly as the le
             &= 422,150,270.64 "s" \
             &= 4,886 "days"
   $
-  
+
+== Problem (`learning_rate_schedule`): Implement cosine learning rate schedule with linear warmup (1 point)
+
+See `lr_cosine_schedule` function in `cs336_basics/lr_schedule.py`
+
+== Problem (`gradient_clipping`): Implement gradient clipping (1 point)
+
+See `gradient_clip` function in `cs336_basics/gradient_clip.py`
+
+= 5. Training Loop
+
+== Problem (`data_loading`): Implement data loading (2 point)
+
+See `get_batch` function in `cs336_basics/data_loader.py`
+
+== Problem (`checkpointing`): Implement model checkpointing (1 points)
+
+See `save_checkpoint` and `load_checkpoint` functions in `cs336_basics/checkpointing.py`
+
+== Problem (`training_together`): Put it together (4 points)
+
+See `cs336_basics/train.py`
+
+The training script supports:
+
+- Loading configurations from JSON or YAML files supplied as command-line arguments
+- Arbitrary command-line overrides
+- Logging to WandB (and to local files and the console)
+- Checkpointing (and resumption)
+- Loading data with `np.memmap`
+
+= 6. Generating text
+
+== Problem (`decoding`): Decoding (3 points)
+
+See `decode` function in `cs336_basics/decode.py`
+
 = 7. Experiments
 
 == Problem (`experiment_log`): Experiment Logging (3 points)
@@ -594,7 +695,7 @@ I've linked WandB pages for each of the experiments below. Here is a consolidate
   Removing RMSNorms dramatically decreases stability. At the previous optimal learning rate, the optimizer diverges almost immediately. By decreasing the learning rate by 90%, I was able to train for full token budget, but still had significant spikes in loss, and a lower-quality final model (eval loss of 1.57 vs 1.38).
 
 
-== Problem (`pre-norm_ablation`): Implement post-norm and train (1 point)
+== Problem (`pre_norm_ablation`): Implement post-norm and train (1 point)
 
 + #figure(
     image("images/pre-norm-ablation.png"),
