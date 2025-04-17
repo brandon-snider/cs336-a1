@@ -35,23 +35,16 @@
 
 == Problem (`train_bpe_tinystories`): BPE Training on TinyStories (2 points)
 
-+ Time: 135.32s (0.038h)
-
-  Memory: 4GB (per Scalene)
-  
++ Time: 135.32s (0.038h) \
+  Memory: 4GB (per Scalene) \
   Longest token: `' accomplishment'`. This makes sense. With a fairly large vocabulary and a dataset of clean English text, one would expect the longest tokens to be long strings of valid English that appear contiguously in the dataset.
 
 + Pre-tokenization took roughly half of the overall training time (102s). The specific bottleneck is creating a bytes object for each individual character in each regex match to construct the keys in the table of coarse-grained tokens.
 
 == Problem (`train_bpe_expts_owt`): BPE Training on OpenWebText (2 points)
 
-+ Longest token:
-
-  `b'\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83
-\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83
-\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82'`
-
-  Which decodes to `ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ`
++ Longest token: `b'\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82\xc3\x83\xc3\x82'
+` which decodes to `ÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂ`
   
   This makes sense. This repeated pattern is common when documents are double-encoded or improperly decoded, which is common in scraped web content. In fact, this exact byte sequence appear over 4,500 times in the OWT training set.
   
@@ -60,11 +53,9 @@
 == Problem (`tokenizer_experiments`): Experiments with Tokenizers (4 points)
 
 + TinyStories tokenizer compression ratio (bytes/token): $4.01$
-
   OpenWebText tokenizer compression ratio (bytes/token): $4.50$
 
 + OpenWebText sample, tokenized with TinyStories tokenizer: $3.40$
-
   The compression ratio is significantly worse than the compression ratio that the same tokenizer achieves on a sample of data from the same distribution on which the tokenizer was trained. Specifically, the OpenWebText/TinyStories compression ratio is $~85%$ of the TinyStories/TinyStories compression ratio.
 
 + $"Throughput" approx 6.8 times 10^6 "bytes/second" = 6.8 "MB/second"$
@@ -427,7 +418,7 @@ For learning rates of 1, 1e1, and 1e2, the loss decreases more quickly as the le
   *Activation Memory*
 
   Each transformer block:
-  - Two RMSNorms: $2 times B times T times d $
+  - RMSNorm results: $2 times B times T times d $
   - MHA:
     - QKV projections: $3 times B times T times d$
     - Attention scores ($Q^T K$): $B times h times T times T$
@@ -499,6 +490,25 @@ For learning rates of 1, 1e1, and 1e2, the loss decreases more quickly as the le
   
 = 7. Experiments
 
+== Problem (`experiment_log`): Experiment Logging (3 points)
+
+I used WandB to log my experiments. For each run, I logged the entire run configuration (hyperparameters, model configuratin, dataset paths, etc.), as well as the losses, perplexity, learning rate, gradient norms, and throughput (tokens/second). I tagged some runs to be make them easy to find (e.g. "lr-sweep", "pre-norm-ablation", etc.).
+
+I've linked WandB pages for each of the experiments below. Here is a consolidated list:
+
+#table(columns: (auto, auto), inset: 10pt, align:horizon,table.header([experiment],[WandB link]),
+[Learning Rate Sweep], [#link("https://api.wandb.ai/links/brandon-snider-stanford-university/eeme38mw", "WandB Report")],
+[Batch Size Experiments], [#link("https://api.wandb.ai/links/brandon-snider-stanford-university/nh2sr9uu", "WandB Report")],
+[Layer Norm Ablation], [#link("https://api.wandb.ai/links/brandon-snider-stanford-university/0j2dyekh", "WandB Report")],
+[Pre-Norm Ablation], [#link("https://api.wandb.ai/links/brandon-snider-stanford-university/3t2e9iph", "WandB Report")],
+[RoPE Ablation], [#link("https://api.wandb.ai/links/brandon-snider-stanford-university/k3kefq9l", "WandB Report")],
+[SwiGLU Ablation], [#link("https://api.wandb.ai/links/brandon-snider-stanford-university/9az6yw1v", "WandB Report")],
+[OpenWebText Baseline], [#link("https://api.wandb.ai/links/brandon-snider-stanford-university/mk12bd50", "WandB Report")],
+[Leaderboard Runs], [#link("https://api.wandb.ai/links/brandon-snider-stanford-university/alu1li8w", "WandB Report")]
+)
+
+
+
 == Problem (`learning_rate`): Tune the learning rate (3 points)
 
 + #figure(
@@ -529,7 +539,9 @@ For learning rates of 1, 1e1, and 1e2, the loss decreases more quickly as the le
 
 == Problem (`batch_size_experiment`): Batch size variations (1 point)
 
-+ #figure(
++ \@TODO (variants I tried; learning curves; comments on findings)
+
+  #figure(
     image("images/batch-size-variations.png"),
     caption: "Batch size variations on TinyStories",
   )
@@ -545,7 +557,9 @@ For learning rates of 1, 1e1, and 1e2, the loss decreases more quickly as the le
 
 == Problem (`generate`): Generate text (1 point)
 
-+ Decoding parameters:
++ \@TODO (256-token output from TS model; comments on fluency and factors)
+
+  Decoding parameters:
 
   `print(decode(model, tokenizer, "The", max_new_tokens=512, temperature=0.7, top_p=0.9))`
 
@@ -572,7 +586,9 @@ For learning rates of 1, 1e1, and 1e2, the loss decreases more quickly as the le
 
 == Problem (`layer_norm_ablation`): Remove RMSNorm and train (1 point)
 
-+ #figure(
++ \@TODO (learning curves at prev. optimal LR and new optimal LR; comments on diff.)
+
+  #figure(
     image("images/ln-ablation.png"),
     caption: "Layer norm ablation on TinyStories",
   )
@@ -586,7 +602,9 @@ For learning rates of 1, 1e1, and 1e2, the loss decreases more quickly as the le
 
 == Problem (`pre-norm_ablation`): Implement post-norm and train (1 point)
 
-+ #figure(
++ \@TODO (learning curves for post-norm compared to pre-norm; comments on diff.)
+
+  #figure(
     image("images/pre-norm-ablation.png"),
     caption: "Pre-norm vs. post-norm on TinyStories",
   )
@@ -598,7 +616,9 @@ For learning rates of 1, 1e1, and 1e2, the loss decreases more quickly as the le
 
 == Problem (`no_pos_emb`): Implement NoPE (1 point)
 
-+ #figure(
++ \@TODO (learning curves comparing NoPE and RoPE; comments on diff.)
+
+  #figure(
     image("images/rope-ablation.png"),
     caption: "RoPE vs. NoPE on TinyStories",
   )
@@ -610,7 +630,9 @@ For learning rates of 1, 1e1, and 1e2, the loss decreases more quickly as the le
 
 == Problem (`swiglu_ablation`): SwiGLU vs SiLU (1 point)
 
-+ #figure(
++ \@TODO (learning curves comparing SwiGLU and SiLU; few sentences on findings)
+
+  #figure(
     image("images/swiglu-ablation.png"),
     caption: "SwiGLU vs. SiLU on TinyStories",
   )
@@ -624,7 +646,9 @@ For learning rates of 1, 1e1, and 1e2, the loss decreases more quickly as the le
 
 == Problem (`main_experiment`): Experiment on OWT (2 points)
 
-+ #figure(
++ \@TODO (learning curve on OWT; diff. from TS + interpretation; generation+ comments)
+
+  #figure(
     image("images/owt-baseline.png"),
     caption: "OpenWebText Learning Curve",
   )
@@ -665,4 +689,46 @@ For learning rates of 1, 1e1, and 1e2, the loss decreases more quickly as the le
 
 == Problem (`leaderboard`): Leaderboard (6 points)
 
-+ \@TODO (final validation loss; associated learning curve; description of what was done)
++ Final validation loss: $3.26813$
+
+  Model:
+
+  I found I could get the fastest improvement in loss by severely undertraining a large model, and preferencing a short model (few layers relative to $d_"model"$ and $d_"ff"$). I also used weight tying, but didn't change much else about the model (kept RoPE, SwiGLU, pre-norm with RMSNorm, MHA, etc.) Final configuration:
+
+  - $d_"model" = 1280$
+  - $d_"ff" = 3456$
+  - $"num_layers" = 12$
+  - $"num_heads" = 16$
+  - $"context_length" = 512$
+  - Tied embeddings and LM head
+  
+  Training code:
+
+  - `torch.compile`
+  - AMP with `torch.autocast`
+  - Pinned memory for data loading
+
+  Training parameters:
+
+  I extensively tuned the learning rate and batch size. I tested cosine scheduling, linear scheduling, and some more creative ideas (example: linear warmup, fast exponential decay, then gradual cosine/linear decay). Ultimatley a simple linear decay schedule worked best, with a mininum learning rate that was almost a third of the maximum learning rate (on the intuition that the model would be severely undertrained, and decaying the learning rate early wouldn't help).
+
+  I experimented with weight decay and optimizer betas, but observed very little difference.
+
+  - Learning rate: 1% linear warmup to `5e-4`, then linear decay to `1.8e-4`
+  - Batch size: 128
+  - Steps: 13,000
+  - Total tokens: \~851M
+  
+  #link("https://api.wandb.ai/links/brandon-snider-stanford-university/8xx9jpzg", "WandB Report")
+
+  #figure(
+    image("images/leaderboard-eval-loss.png"),
+    caption: "Leaderboard Run — Eval Loss",
+  )
+
+  #figure(
+    image("images/leaderboard-train-loss.png"),
+    caption: "Leaderboard Run — Train Loss",
+  )
+  
+  
