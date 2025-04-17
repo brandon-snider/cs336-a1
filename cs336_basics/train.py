@@ -8,7 +8,6 @@ import wandb.wandb_run
 import yaml
 import math
 import wandb
-# import torch.nn.functional as F
 
 from cs336_basics.adamw import AdamW
 from cs336_basics.checkpointing import save_checkpoint, load_checkpoint
@@ -30,7 +29,7 @@ class Logger:
         # Initialize log file
         if self.log_file:
             os.makedirs(os.path.dirname(self.log_file), exist_ok=True)
-            # Only clear the file if not resuming
+            # Only clear the file if not resuming from checkpoint
             if not resume:
                 with open(self.log_file, "w") as _:  # Clear the file
                     pass
@@ -109,11 +108,13 @@ def load_config(config_path: str | None = None, base_config: dict | None = None)
     if torch.cuda.is_available():
         if config["training"].get("device", None) is not None:
             device = config["training"]["device"]
-            print(f"Using device: {device}")
         else:
             device = "cuda"
     elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
         device = "mps"
+
+    print(f"Using device: {device}")
+
     dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
 
     config["device"] = device
@@ -206,6 +207,7 @@ def train(config: Config | None = None):
         start_step = load_checkpoint(checkpoint_path, model, optimizer) + 1
         logger.log_info(f"Resuming training from step {start_step}")
 
+    # Compile + AMP on GPU, AOT on MPS
     use_compile = True
     if use_compile and device != "mps":
         model = torch.compile(model)
@@ -263,7 +265,7 @@ def train(config: Config | None = None):
 
         progress_str = get_progress_str(step, max_steps)
 
-        # Log evaluation metrics
+        # WandB metrics
         metrics = {
             "eval/loss": val_loss,
             "eval/perplexity": get_perplexity(val_loss),
@@ -271,7 +273,7 @@ def train(config: Config | None = None):
             "step": step,
         }
 
-        # Create formatted display metrics
+        # Console + local file metrics
         display_metrics = {
             "step": progress_str,
             "v_loss": f"{val_loss:.4f}",
@@ -282,12 +284,14 @@ def train(config: Config | None = None):
         logger.log_info(display_metrics)
         logger.log_metrics(metrics)
 
+        # Restore to training mode
         model.train()
 
     # Only evaluate before training if not resuming
     if config.training.eval_before_training and not resuming:
         evaluate(0)
 
+    # Load the first batch
     x, y = get_batch(train_data, batch_size, config.model.context_length, device)
 
     model.train()
@@ -297,6 +301,7 @@ def train(config: Config | None = None):
         is_last_step = step == max_steps
         loss_accum = 0.0
 
+        # Gradient accumulation loop
         for _ in range(grad_accum_steps):
             with torch.autocast(device_type=device, dtype=dtype):
                 logits = model(x)
@@ -336,7 +341,7 @@ def train(config: Config | None = None):
         train_loss = loss_accum.item()
         progress_str = get_progress_str(step, max_steps)
 
-        # Log training metrics
+        # WandB metrics
         metrics = {
             "train/loss": train_loss,
             "train/perplexity": get_perplexity(train_loss),
@@ -347,7 +352,7 @@ def train(config: Config | None = None):
             "step": step,
         }
 
-        # Create formatted display metrics
+        # Console + local file metrics
         display_metrics = {
             "step": progress_str,
             "t_loss": f"{train_loss:.4f}",
@@ -400,7 +405,7 @@ def get_progress_str(step, max_steps):
 
 
 def parse_value(value_str: str):
-    """Convert arg to list, int, float, bool, or leave as string."""
+    """Convert argparse arg to list, int, float, bool, or leave as string."""
     if value_str.strip().startswith("[") and value_str.strip().endswith("]"):
         content = value_str.strip()[1:-1].strip()
         return [parse_value(v.strip()) for v in content.split(",")] if content else []
@@ -456,8 +461,7 @@ if __name__ == "__main__":
         # Use the override config if provided, or None otherwise
         config = load_config(args.override_config, base_config=base_config)
     else:
-        # Will use default if args.config is None
-        config = load_config(args.config)
+        config = load_config(args.config)  # Will use default if args.config is None
 
     for override_str in args.override_param:
         if "=" not in override_str:

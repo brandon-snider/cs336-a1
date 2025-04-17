@@ -539,9 +539,7 @@ I've linked WandB pages for each of the experiments below. Here is a consolidate
 
 == Problem (`batch_size_experiment`): Batch size variations (1 point)
 
-+ \@TODO (variants I tried; learning curves; comments on findings)
-
-  #figure(
++ #figure(
     image("images/batch-size-variations.png"),
     caption: "Batch size variations on TinyStories",
   )
@@ -557,9 +555,7 @@ I've linked WandB pages for each of the experiments below. Here is a consolidate
 
 == Problem (`generate`): Generate text (1 point)
 
-+ \@TODO (256-token output from TS model; comments on fluency and factors)
-
-  Decoding parameters:
++ Decoding parameters:
 
   `print(decode(model, tokenizer, "The", max_new_tokens=512, temperature=0.7, top_p=0.9))`
 
@@ -586,9 +582,7 @@ I've linked WandB pages for each of the experiments below. Here is a consolidate
 
 == Problem (`layer_norm_ablation`): Remove RMSNorm and train (1 point)
 
-+ \@TODO (learning curves at prev. optimal LR and new optimal LR; comments on diff.)
-
-  #figure(
++ #figure(
     image("images/ln-ablation.png"),
     caption: "Layer norm ablation on TinyStories",
   )
@@ -602,9 +596,7 @@ I've linked WandB pages for each of the experiments below. Here is a consolidate
 
 == Problem (`pre-norm_ablation`): Implement post-norm and train (1 point)
 
-+ \@TODO (learning curves for post-norm compared to pre-norm; comments on diff.)
-
-  #figure(
++ #figure(
     image("images/pre-norm-ablation.png"),
     caption: "Pre-norm vs. post-norm on TinyStories",
   )
@@ -616,9 +608,7 @@ I've linked WandB pages for each of the experiments below. Here is a consolidate
 
 == Problem (`no_pos_emb`): Implement NoPE (1 point)
 
-+ \@TODO (learning curves comparing NoPE and RoPE; comments on diff.)
-
-  #figure(
++ #figure(
     image("images/rope-ablation.png"),
     caption: "RoPE vs. NoPE on TinyStories",
   )
@@ -630,9 +620,7 @@ I've linked WandB pages for each of the experiments below. Here is a consolidate
 
 == Problem (`swiglu_ablation`): SwiGLU vs SiLU (1 point)
 
-+ \@TODO (learning curves comparing SwiGLU and SiLU; few sentences on findings)
-
-  #figure(
++ #figure(
     image("images/swiglu-ablation.png"),
     caption: "SwiGLU vs. SiLU on TinyStories",
   )
@@ -646,9 +634,7 @@ I've linked WandB pages for each of the experiments below. Here is a consolidate
 
 == Problem (`main_experiment`): Experiment on OWT (2 points)
 
-+ \@TODO (learning curve on OWT; diff. from TS + interpretation; generation+ comments)
-
-  #figure(
++ #figure(
     image("images/owt-baseline.png"),
     caption: "OpenWebText Learning Curve",
   )

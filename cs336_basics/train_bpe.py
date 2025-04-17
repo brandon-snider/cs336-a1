@@ -134,9 +134,7 @@ def get_pair_freqs(
 
 
 def build_new_repr(old_repr: tuple[bytes], pair: tuple[bytes, bytes]) -> tuple[bytes]:
-    """
-    Replaces every occurrence of pair=(x,y) in old_repr with the merged symbol x+y.
-    """
+    """Replaces every occurrence of pair=(x,y) in old_repr with the merged symbol x+y."""
     new_symbols = []
     i = 0
     while i < len(old_repr):
@@ -155,10 +153,7 @@ def merge(
     pairs_to_keys: dict[tuple[bytes, bytes], set[tuple[bytes]]],
     pair: tuple[bytes, bytes],
 ) -> set[tuple[bytes, bytes]]:
-    """
-    Merges 'pair' into freqs and updates pair_freqs & pairs_to_keys for all
-    affected old/new keys.
-    """
+    """Merges 'pair' into freqs and updates pair_freqs & pairs_to_keys for all affected old/new keys."""
     changed_pairs = set()
     keys_to_modify = pairs_to_keys[pair].copy()
 
@@ -238,6 +233,7 @@ def train_bpe(
     for p, f in pair_freqs.items():
         if f > 0:
             heapq.heappush(pair_heap, (-f, ReverseLexOrderPair(p), p))
+
     print(f"Initial pair frequencies: finished in {time.time() - start_time:.2f}s")
 
     n_initial_tokens = len(initial_tokens)

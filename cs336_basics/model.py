@@ -111,6 +111,7 @@ class CausalMultiHeadSelfAttention(torch.nn.Module):
             q = rope(q, token_positions)
             k = rope(k, token_positions)
 
+        # Create causal mask for self-attention
         mask = ~torch.triu(torch.ones((seq_len, seq_len), device=x.device, dtype=torch.bool), diagonal=1)
 
         y = scaled_dot_product_attention(q, k, v, mask)
@@ -187,6 +188,7 @@ class Block(torch.nn.Module):
         self.ln2 = RMSNorm(d_model, device=device, dtype=dtype)
 
         ffn_type = kwargs.get("ffn_type", "swiglu")
+
         if ffn_type == "silu":
             self.ffn = SiLU(d_model, d_ff, device, dtype)
         elif ffn_type == "swiglu":
@@ -197,7 +199,6 @@ class Block(torch.nn.Module):
     def forward(self, x: torch.Tensor):
         x = x + self.attn(self.ln1(x), self.rope)
         x = x + self.ffn(self.ln2(x))
-
         return x
 
 
@@ -262,7 +263,7 @@ class Transformer(torch.nn.Module):
         self.lm_head = Linear(d_model, vocab_size, device, dtype)
 
         if kwargs.get("weight_tying", False):
-            self.token_embeddings.weight = self.lm_head.weight
+            self.lm_head.weight = self.token_embeddings.weight
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         batch_size, seq_len = x.shape

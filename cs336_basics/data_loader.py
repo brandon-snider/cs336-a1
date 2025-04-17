@@ -36,6 +36,7 @@ def get_batch(x: np.ndarray, batch_size: int, context_length: int, device: str):
     y_batch = torch.from_numpy(y_sequences)
 
     if device.startswith("cuda"):
+        # Pin memory if on GPU
         x_batch, y_batch = (
             x_batch.pin_memory().to(device, non_blocking=True),
             y_batch.pin_memory().to(device, non_blocking=True),
