@@ -47,7 +47,7 @@ training:
   warmup_ratio: 0.01
   cosine_cycle_iters: 16_000
 
-  # # Linear LR schedule
+  # Linear LR schedule
   # lr_schedule: "linear"
   # lr_max: 5.0e-4
   # lr_min: 1.8e-4
