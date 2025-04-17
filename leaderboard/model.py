@@ -24,14 +24,21 @@ def scaled_dot_product_attention(Q: torch.Tensor, K: torch.Tensor, V: torch.Tens
 
 class Linear(torch.nn.Module):
     def __init__(
-        self, in_features: int, out_features: int, device: torch.device | None = None, dtype: torch.dtype | None = None
+        self,
+        in_features: int,
+        out_features: int,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
+        std: float | None = None,
     ):
         super().__init__()
 
-        mean = 0
-        std = math.sqrt(2 / (out_features + in_features))
-        lower = -3 * std
-        upper = 3 * std
+        if std is None:
+            std = math.sqrt(2.0 / (out_features + in_features))
+
+        mean = 0.0
+        lower = -3.0 * std
+        upper = 3.0 * std
 
         w = torch.empty((out_features, in_features), device=device, dtype=dtype)
         torch.nn.init.trunc_normal_(w, mean=mean, std=std, a=lower, b=upper)
@@ -83,6 +90,9 @@ class CausalMultiHeadSelfAttention(torch.nn.Module):
 
         self.wqkv = Linear(d_model, 3 * d_model, device, dtype)
         self.output_proj = Linear(d_model, d_model, device, dtype)
+
+        if kwargs.get("zero_init", False):
+            self.output_proj.weight.data.zero_()
 
         self.num_heads = num_heads
         self.d_model = d_model
@@ -141,12 +151,17 @@ def silu_activation(x: torch.Tensor) -> torch.Tensor:
 
 
 class SwiGLU(torch.nn.Module):
-    def __init__(self, d_model: int, d_ff: int, device: torch.device | None = None, dtype: torch.dtype | None = None):
+    def __init__(
+        self, d_model: int, d_ff: int, device: torch.device | None = None, dtype: torch.dtype | None = None, **kwargs
+    ):
         super().__init__()
 
         self.w1 = Linear(d_model, d_ff, device, dtype)
         self.w2 = Linear(d_ff, d_model, device, dtype)
         self.w3 = Linear(d_model, d_ff, device, dtype)
+
+        if kwargs.get("zero_init_ffn_out", False):
+            self.w2.weight.data.zero_()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         a1 = self.w1(x)
@@ -155,11 +170,16 @@ class SwiGLU(torch.nn.Module):
 
 
 class SiLU(torch.nn.Module):
-    def __init__(self, d_model: int, d_ff: int, device: torch.device | None = None, dtype: torch.dtype | None = None):
+    def __init__(
+        self, d_model: int, d_ff: int, device: torch.device | None = None, dtype: torch.dtype | None = None, **kwargs
+    ):
         super().__init__()
 
         self.w1 = Linear(d_model, d_ff, device, dtype)
         self.w2 = Linear(d_ff, d_model, device, dtype)
+
+        if kwargs.get("zero_init_ffn_out", False):
+            self.w2.weight.data.zero_()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         a1 = self.w1(x)
@@ -190,9 +210,9 @@ class Block(torch.nn.Module):
         ffn_type = kwargs.get("ffn_type", "swiglu")
 
         if ffn_type == "silu":
-            self.ffn = SiLU(d_model, d_ff, device, dtype)
+            self.ffn = SiLU(d_model, d_ff, device, dtype, **kwargs)
         elif ffn_type == "swiglu":
-            self.ffn = SwiGLU(d_model, d_ff, device, dtype)
+            self.ffn = SwiGLU(d_model, d_ff, device, dtype, **kwargs)
         else:
             raise ValueError(f"Unsupported ffn_type: {ffn_type}")
 
@@ -260,10 +280,18 @@ class Transformer(torch.nn.Module):
         )
 
         self.ln_final = RMSNorm(d_model, device=device, dtype=dtype)
-        self.lm_head = Linear(d_model, vocab_size, device, dtype)
 
-        if kwargs.get("weight_tying", False):
-            self.lm_head.weight = self.token_embeddings.weight
+        # Only accept the tied_weights_std if weight tying is enabled
+        self.tie_weights = kwargs.get("tie_weights", False)
+        tied_weights_std = kwargs.get("tied_weights_std", None) if self.tie_weights else None
+
+        if self.tie_weights and tied_weights_std is None:
+            print("WARNING: tied_weights=true but tied_weights_std is not provided, using Linear module default")
+
+        self.lm_head = Linear(d_model, vocab_size, device, dtype, std=tied_weights_std)
+
+        if self.tie_weights:
+            self.token_embeddings.weight = self.lm_head.weight
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         batch_size, seq_len = x.shape

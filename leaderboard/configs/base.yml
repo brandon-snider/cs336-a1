@@ -20,9 +20,13 @@ model:
   vocab_size: 32_000
   context_length: 512
   rope_theta: 10_000
-  embedding_std: 0.02
-  weight_tying: true
   ffn_type: "swiglu"
+  zero_init_attn_out: true
+  zero_init_ffn_out: true
+
+  # Use both or neither
+  tie_weights: true
+  tied_weights_std: 0.02
 
 
 optimizer:
