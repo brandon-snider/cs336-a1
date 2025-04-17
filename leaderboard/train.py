@@ -12,7 +12,7 @@ import wandb
 from cs336_basics.adamw import AdamW
 from cs336_basics.checkpointing import save_checkpoint, load_checkpoint
 from cs336_basics.lr_schedule import lr_linear_schedule
-from cs336_basics.model import Transformer
+from leaderboard.model import Transformer
 from cs336_basics.data_loader import get_batch
 from cs336_basics.loss import cross_entropy_loss
 from cs336_basics.gradient_clip import gradient_clip
@@ -182,6 +182,7 @@ def train(config: Config | None = None):
     model = Transformer(**config.model, device=device, dtype=dtype)
     model.to(device)
 
+    print(f"Total params: {sum(p.numel() for p in model.parameters())}")
     print(f"Trainable params: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
 
     # Only decay 2D parameters (i.e. not layernorms)
@@ -305,7 +306,6 @@ def train(config: Config | None = None):
         for _ in range(grad_accum_steps):
             with torch.autocast(device_type=device, dtype=dtype):
                 logits = model(x)
-
             loss = cross_entropy_loss(logits, y) / grad_accum_steps
 
             x, y = get_batch(train_data, batch_size, config.model.context_length, device)

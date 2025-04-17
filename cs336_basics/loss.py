@@ -1,7 +1,7 @@
 import torch
 
 
-def cross_entropy_loss(logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+def cross_entropy_loss_naive(logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
     """
     Computes the cross entropy loss between logits and target indices.
 
@@ -21,3 +21,12 @@ def cross_entropy_loss(logits: torch.Tensor, targets: torch.Tensor) -> torch.Ten
     target_log_probs = log_probs.gather(dim=-1, index=targets.unsqueeze(-1)).squeeze(-1)
 
     return -target_log_probs.mean()
+
+
+def cross_entropy_loss(logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+    max_vals, _ = logits.max(dim=-1, keepdim=True)
+    target_logits = logits.gather(dim=-1, index=targets.unsqueeze(-1))
+    shifted = logits - max_vals
+    sum_exp = shifted.exp().sum(dim=-1, keepdim=True)
+    log_sum_exp = sum_exp.log()
+    return -((target_logits - max_vals) - log_sum_exp).mean()

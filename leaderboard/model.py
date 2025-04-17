@@ -292,6 +292,8 @@ class Transformer(torch.nn.Module):
 
         if self.tie_weights:
             self.token_embeddings.weight = self.lm_head.weight
+        elif kwargs.get("zero_init_lm_head", False):
+            self.lm_head.weight.data.zero_()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         batch_size, seq_len = x.shape

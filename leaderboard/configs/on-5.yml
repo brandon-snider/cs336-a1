@@ -1,0 +1,12 @@
+model:
+  d_model: 1280
+  d_ff: 3456
+  num_heads: 16
+  num_layers: 12
+
+training:
+  max_steps: 15_000
+
+  lr_schedule: "linear"
+  lr_max: 5.0e-4
+  lr_min: 1.0e-4
