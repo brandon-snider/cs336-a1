@@ -10,7 +10,7 @@ model:
   clamp_logits_value: 20
   use_value_residual: true
   use_embed_shortcut: true
-  
+
 optimizer:
   name: "muon"
   weight_decay: 0.01
@@ -24,10 +24,10 @@ training:
   max_steps: 12_200
   checkpoint_interval: 6000
   eval_interval: 100
-  eval_steps: 1
+  eval_steps: 10
 
   # LR schedule that uses custom dictionary-based scheduler
-  lr_max: 1.7e-3
+  lr_max: 1.6e-3
   warmup_ratio: 0 # or warmup_iters
   warmup_iters: False # or warmup_ratio
   lr_decay_schedule:
