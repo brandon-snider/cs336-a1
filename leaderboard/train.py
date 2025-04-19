@@ -451,8 +451,6 @@ def train(config: Config | None = None):
 
             if max_steps - step > 500:
                 eval_steps = 1
-            elif max_steps - step <= 220:
-                eval_steps = config.training.eval_steps * 6
 
             evaluate(step, eval_steps=eval_steps)
 
