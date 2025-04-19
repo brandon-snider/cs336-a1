@@ -1,3 +1,4 @@
+from cs336_basics.muon import Muon
 import torch
 import os
 import time
@@ -11,12 +12,11 @@ import wandb
 
 from cs336_basics.adamw import AdamW
 from cs336_basics.checkpointing import save_checkpoint, load_checkpoint
-from cs336_basics.lr_schedule import lr_linear_schedule
 from leaderboard.model import Transformer
 from cs336_basics.data_loader import get_batch
 from cs336_basics.loss import cross_entropy_loss
 from cs336_basics.gradient_clip import gradient_clip
-from cs336_basics.lr_schedule import lr_cosine_schedule, lr_double_schedule
+from cs336_basics.lr_schedule import LRSchedule, seq_len_schedule, batch_size_schedule
 
 
 class Logger:
@@ -101,7 +101,26 @@ def load_config(config_path: str | None = None, base_config: dict | None = None)
             else:
                 config[section] = section_config
 
-    config["run"]["run_id"] = config["run"]["run_id"].replace("<timestamp>", f"{int(time.time())}")
+    # Replace placeholders in run_id with actual values
+    replacements = {
+        "<timestamp>": f"{int(time.time())}",
+        "<d_model>": str(config["model"]["d_model"]),
+        "<d_ff>": str(config["model"]["d_ff"]),
+        "<num_heads>": str(config["model"]["num_heads"]),
+        "<num_layers>": str(config["model"]["num_layers"]),
+        "<lr_max>": format(config["training"]["lr_max"], ".1e"),
+        "<max_steps>": str(config["training"]["max_steps"]),
+        "<optimizer>": config["optimizer"]["name"],
+    }
+
+    # Set the initial optimizer learning rate to the max learning rate
+    config["optimizer"]["lr"] = config["training"]["lr_max"]
+
+    run_id = config["run"]["run_id"]
+    for placeholder, value in replacements.items():
+        run_id = run_id.replace(placeholder, value)
+
+    config["run"]["run_id"] = run_id
 
     # Detect device and dtype at runtime
     device = "cpu"
@@ -122,6 +141,54 @@ def load_config(config_path: str | None = None, base_config: dict | None = None)
 
     # Convert nested dictionary to Config object
     return Config(config)
+
+
+def get_optimizers(model: Transformer, config: Config) -> list[torch.optim.Optimizer]:
+    if config.optimizer.name == "adamw":
+        return [AdamW(model.parameters(), **config.optimizer)]
+
+    if config.optimizer.name != "muon":
+        raise ValueError(f"Unsupported optimizer: {config.optimizer.name}")
+
+    # Using Muon
+
+    muon_params = [
+        p
+        for name, p in model.named_parameters()
+        if p.ndim >= 2 and "token_embeddings" not in name and "lm_head" not in name
+    ]
+
+    if not config.optimizer.use_adamw_groups:
+        adamw_params = [
+            p
+            for name, p in model.named_parameters()
+            if not (p.ndim >= 2 and "token_embeddings" not in name and "lm_head" not in name)
+        ]
+
+        return [Muon(muon_params=muon_params, adamw_params=adamw_params, **config.optimizer)]
+
+    # Using AdamW groups
+
+    embed_params = [model.token_embeddings.weight]
+    lm_head_params = [model.lm_head.weight]
+    scalar_params = [p for p in model.parameters() if p.ndim < 2]
+
+    adamw_groups = []
+    adamw_groups.append(dict(params=embed_params, lr=config.training.lr_embed))
+    adamw_groups.append(dict(params=scalar_params, lr=config.training.lr_scalar))
+
+    if not config.model.tie_weights:
+        adamw_groups.append(dict(params=lm_head_params, lr=config.training.lr_lm_head))
+
+    return [
+        Muon(muon_params=muon_params, **config.optimizer),
+        AdamW(
+            adamw_groups,
+            betas=config.optimizer.adamw_betas,
+            eps=config.optimizer.adamw_eps,
+            weight_decay=config.optimizer.weight_decay,
+        ),
+    ]
 
 
 def train(config: Config | None = None):
@@ -147,22 +214,8 @@ def train(config: Config | None = None):
         os.remove(latest_symlink)
     os.symlink(os.path.abspath(run_dir), latest_symlink, target_is_directory=True)
 
-    # Initialize wandb and logger
-    wandb_run = (
-        None
-        if not config.run.wandb_project
-        else wandb.init(
-            project=config.run.wandb_project,
-            id=config.run.run_id,  # Use run_id as the wandb id
-            resume="must" if resuming else None,  # Set resume conditionally
-            name=config.run.run_id,
-            config=config,
-            dir=run_dir,
-            tags=config.run.wandb_tags,
-        )
-    )
-
-    logger = Logger(log_file=log_file, wandb_run=wandb_run, resume=resuming)
+    # Will create a new logger that logs to wandb later (after wandb is initialized)
+    logger = Logger(log_file=log_file, wandb_run=None, resume=resuming)
 
     # Save configuration (only if not resuming)
     if resuming:
@@ -185,27 +238,48 @@ def train(config: Config | None = None):
     print(f"Total params: {sum(p.numel() for p in model.parameters())}")
     print(f"Trainable params: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
 
-    # Only decay 2D parameters (i.e. not layernorms)
-    param_dict = {pn: p for pn, p in model.named_parameters() if p.requires_grad}
-    decay_params = [p for n, p in param_dict.items() if p.dim() >= 2]
-    nodecay_params = [p for n, p in param_dict.items() if p.dim() < 2]
-    optim_groups = [
-        {"params": decay_params, **config.optimizer},
-        {"params": nodecay_params, **config.optimizer, "weight_decay": 0.0},
-    ]
-    num_decay_params = sum(p.numel() for p in decay_params)
-    num_nodecay_params = sum(p.numel() for p in nodecay_params)
-    print(f"Decayed parameter tensors: {len(decay_params)}, with {num_decay_params:,} parameters")
-    print(f"Non-decayed parameter tensors: {len(nodecay_params)}, with {num_nodecay_params:,} parameters")
+    max_steps = config.training.max_steps
+    batch_size = config.training.batch_size
+    max_l2_norm = config.training.max_l2_norm
+    eval_interval = config.training.eval_interval
+    checkpoint_interval = config.training.checkpoint_interval
+    grad_accum_steps = config.training.grad_accum_steps
 
-    optimizer = AdamW(optim_groups, **config.optimizer)
-    # optimizer = AdamW(model.parameters(), **config.optimizer)
+    warmup_ratio = config.training.warmup_ratio
+    warmup_iters = max_steps * warmup_ratio
+    if config.training.warmup_iters is not False:
+        warmup_iters = config.training.warmup_iters
+
+    # Initialize optimizers
+    optimizers = get_optimizers(model, config)
+
+    # Initialize learning rate schedules
+    lr_schedules = []
+    for optimizer in optimizers:
+        for param_group in optimizer.param_groups:
+            # Make a deep copy of the schedule phases
+            decay_schedule = [phase.copy() for phase in config.training.lr_decay_schedule]
+
+            # Scale the decay schedule if the learning rate is not the max learning rate
+            if param_group["lr"] != config.training.lr_max:
+                lr_scale = param_group["lr"] / config.training.lr_max
+                for phase in decay_schedule:
+                    phase["to_lr"] = phase["to_lr"] * lr_scale
+
+            lr_schedules.append(
+                LRSchedule(
+                    param_group["lr"],
+                    warmup_iters,
+                    decay_schedule,
+                    param_groups=[param_group],
+                )
+            )
 
     # Load checkpoint if resuming
     if resuming:
         checkpoint_path = config.training.resume_checkpoint
         logger.log_info(f"Loading checkpoint from: {checkpoint_path}")
-        start_step = load_checkpoint(checkpoint_path, model, optimizer) + 1
+        start_step = load_checkpoint(checkpoint_path, model, optimizers) + 1
         logger.log_info(f"Resuming training from step {start_step}")
 
     # Compile + AMP on GPU, AOT on MPS
@@ -216,43 +290,28 @@ def train(config: Config | None = None):
     elif use_compile and device == "mps":
         model = torch.compile(model, backend="aot_eager")
 
-    max_steps = config.training.max_steps
-    batch_size = config.training.batch_size
-    max_l2_norm = config.training.max_l2_norm
-    eval_interval = config.training.eval_interval
-    checkpoint_interval = config.training.checkpoint_interval
-    grad_accum_steps = config.training.grad_accum_steps
+    # Load the first batch
+    seq_len = seq_len_schedule(
+        0,
+        config.training.seq_len_min,
+        config.training.seq_len_schedule,
+    )
 
-    lr_max = config.training.lr_max
-    lr_inter = config.training.lr_inter
-    lr_min = config.training.lr_min
-    warmup_ratio = config.training.warmup_ratio
-    warmup_iters = config.training.warmup_iters
-    exp_decay_iters = config.training.exp_decay_iters
-    phase_two_iters = config.training.phase_two_iters
-    phase_two_type = config.training.phase_two_type
-    cosine_cycle_iters = config.training.cosine_cycle_iters
-    linear_cycle_iters = config.training.linear_cycle_iters
+    batch_size = batch_size_schedule(
+        0,
+        config.training.batch_size_max,
+        config.training.batch_size_schedule,
+    )
 
-    if warmup_iters is False or warmup_iters is None:
-        warmup_iters = int(warmup_ratio * max_steps)
+    x, y = get_batch(train_data, batch_size, seq_len, device)
 
-    if cosine_cycle_iters is False or cosine_cycle_iters is None:
-        cosine_cycle_iters = max_steps
+    model.train()
 
-    if linear_cycle_iters is False or linear_cycle_iters is None:
-        linear_cycle_iters = max_steps
-
-    if phase_two_iters is False or phase_two_iters is None:
-        phase_two_iters = max_steps
-
-    def evaluate(step: int, is_last_step: bool):
-        n_eval_steps = config.training.eval_steps
-
-        if is_last_step:
-            n_eval_steps = n_eval_steps * 3
-
+    def evaluate(step: int, eval_steps: int | None = None):
+        n_eval_steps = eval_steps or config.training.eval_steps
         model.eval()
+
+        losses = []
 
         with torch.no_grad():
             val_loss = 0.0
@@ -261,8 +320,8 @@ def train(config: Config | None = None):
                 with torch.autocast(device_type=device, dtype=dtype):
                     logits = model(x)
                 loss = cross_entropy_loss(logits, y)
-                val_loss += loss.item()
-            val_loss /= n_eval_steps
+                losses.append(loss.item())
+            val_loss = sum(losses) / len(losses)
 
         progress_str = get_progress_str(step, max_steps)
 
@@ -290,17 +349,40 @@ def train(config: Config | None = None):
 
     # Only evaluate before training if not resuming
     if config.training.eval_before_training and not resuming:
-        evaluate(0)
+        evaluate(0, eval_steps=config.training.eval_steps)
 
-    # Load the first batch
-    x, y = get_batch(train_data, batch_size, config.model.context_length, device)
+    # Initialize wandb and logger
+    wandb_run = (
+        None
+        if not config.run.wandb_project
+        else wandb.init(
+            project=config.run.wandb_project,
+            id=config.run.run_id,  # Use run_id as the wandb id
+            resume="must" if resuming else None,  # Set resume conditionally
+            name=config.run.run_id,
+            config=config,
+            dir=run_dir,
+            tags=config.run.wandb_tags,
+        )
+    )
 
-    model.train()
+    logger = Logger(log_file=log_file, wandb_run=wandb_run, resume=resuming)
 
     for step in range(start_step, max_steps + 1):
         t0 = time.time()
-        is_last_step = step == max_steps
         loss_accum = 0.0
+
+        seq_len = seq_len_schedule(
+            step,
+            config.training.seq_len_min,
+            config.training.seq_len_schedule,
+        )
+
+        batch_size = batch_size_schedule(
+            step,
+            config.training.batch_size_max,
+            config.training.batch_size_schedule,
+        )
 
         # Gradient accumulation loop
         for _ in range(grad_accum_steps):
@@ -308,27 +390,19 @@ def train(config: Config | None = None):
                 logits = model(x)
             loss = cross_entropy_loss(logits, y) / grad_accum_steps
 
-            x, y = get_batch(train_data, batch_size, config.model.context_length, device)
+            x, y = get_batch(train_data, batch_size, seq_len, device)
 
             loss_accum += loss.detach()
             loss.backward()
 
         norm = gradient_clip(model.parameters(), max_l2_norm)
 
-        if config.training.lr_schedule == "linear":
-            lr = lr_linear_schedule(step, lr_max, lr_min, warmup_iters, linear_cycle_iters)
-        elif config.training.lr_schedule == "cosine":
-            lr = lr_cosine_schedule(step, lr_max, lr_min, warmup_iters, cosine_cycle_iters)
-        elif config.training.lr_schedule == "double":
-            lr = lr_double_schedule(
-                step, lr_max, lr_inter, lr_min, warmup_iters, exp_decay_iters, phase_two_iters, phase_two_type
-            )
+        for lr_schedule in lr_schedules:
+            lr_schedule.step()
 
-        for param_group in optimizer.param_groups:
-            param_group["lr"] = lr
-
-        optimizer.step()
-        optimizer.zero_grad(set_to_none=True)
+        for optimizer in optimizers:
+            optimizer.step()
+            optimizer.zero_grad(set_to_none=True)
 
         if device == "cuda":
             torch.cuda.synchronize()
@@ -340,6 +414,9 @@ def train(config: Config | None = None):
         tokens_per_sec = config.model.context_length * batch_size * grad_accum_steps / dt
         train_loss = loss_accum.item()
         progress_str = get_progress_str(step, max_steps)
+
+        # Get the learning rate from the first optimizer (always Muon)
+        lr = lr_schedules[0].lr
 
         # WandB metrics
         metrics = {
@@ -367,12 +444,21 @@ def train(config: Config | None = None):
         logger.log_info(display_metrics)
         logger.log_metrics(metrics)
 
+        is_last_step = step == max_steps
+
         if step % eval_interval == 0 or is_last_step:
-            evaluate(step, is_last_step)
+            eval_steps = config.training.eval_steps
+
+            if max_steps - step > 500:
+                eval_steps = 1
+            elif max_steps - step <= 220:
+                eval_steps = config.training.eval_steps * 6
+
+            evaluate(step, eval_steps=eval_steps)
 
         if step % checkpoint_interval == 0 or is_last_step:
             checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint_{step}.pt")
-            save_checkpoint(model, optimizer, step, checkpoint_path)
+            save_checkpoint(model, optimizers, step, checkpoint_path)
 
             # Create symlink pointing `latest` to checkpoint_path (remove `latest` if it exists)
             latest_symlink = os.path.join(checkpoint_dir, "latest.pt")

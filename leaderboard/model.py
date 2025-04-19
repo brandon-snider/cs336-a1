@@ -91,8 +91,13 @@ class CausalMultiHeadSelfAttention(torch.nn.Module):
         self.wqkv = Linear(d_model, 3 * d_model, device, dtype)
         self.output_proj = Linear(d_model, d_model, device, dtype)
 
-        if kwargs.get("zero_init", False):
+        if kwargs.get("zero_init_attn_out", False):
             self.output_proj.weight.data.zero_()
+
+        self.use_value_residual = kwargs.get("use_value_residual", False)
+
+        if self.use_value_residual:
+            self.lambda_v = torch.nn.Parameter(torch.tensor(0.5))
 
         self.num_heads = num_heads
         self.d_model = d_model
@@ -103,7 +108,8 @@ class CausalMultiHeadSelfAttention(torch.nn.Module):
         x: torch.Tensor,
         rope: RotaryPositionalEmbedding | None = None,
         token_positions: torch.Tensor | None = None,
-    ) -> torch.Tensor:
+        v1: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, seq_len, _ = x.shape
         qkv = self.wqkv(x)
 
@@ -114,6 +120,9 @@ class CausalMultiHeadSelfAttention(torch.nn.Module):
         q = rearrange(q, "b s (h d) -> b h s d", h=self.num_heads)
         k = rearrange(k, "b s (h d) -> b h s d", h=self.num_heads)
         v = rearrange(v, "b s (h d) -> b h s d", h=self.num_heads)
+
+        if self.use_value_residual and v1 is not None:
+            v = (1 - self.lambda_v) * v + self.lambda_v * v1.view_as(v)
 
         if rope is not None:
             if token_positions is None:
@@ -126,7 +135,7 @@ class CausalMultiHeadSelfAttention(torch.nn.Module):
 
         y = scaled_dot_product_attention(q, k, v, mask)
         y = rearrange(y, "b h s d -> b s (h d)")
-        return self.output_proj(y)
+        return self.output_proj(y), v
 
 
 class RMSNorm(torch.nn.Module):
@@ -187,6 +196,24 @@ class SiLU(torch.nn.Module):
         return self.w2(silu)
 
 
+class ReLU2(torch.nn.Module):
+    def __init__(
+        self, d_model: int, d_ff: int, device: torch.device | None = None, dtype: torch.dtype | None = None, **kwargs
+    ):
+        super().__init__()
+
+        self.w1 = Linear(d_model, d_ff, device, dtype)
+        self.w2 = Linear(d_ff, d_model, device, dtype)
+
+        if kwargs.get("zero_init_ffn_out", False):
+            self.w2.weight.data.zero_()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.w1(x)
+        x = x.clamp(min=0) ** 2
+        return self.w2(x)
+
+
 class Block(torch.nn.Module):
     def __init__(
         self,
@@ -213,13 +240,24 @@ class Block(torch.nn.Module):
             self.ffn = SiLU(d_model, d_ff, device, dtype, **kwargs)
         elif ffn_type == "swiglu":
             self.ffn = SwiGLU(d_model, d_ff, device, dtype, **kwargs)
+        elif ffn_type == "relu2":
+            self.ffn = ReLU2(d_model, d_ff, device, dtype, **kwargs)
         else:
             raise ValueError(f"Unsupported ffn_type: {ffn_type}")
 
-    def forward(self, x: torch.Tensor):
-        x = x + self.attn(self.ln1(x), self.rope)
+        self.use_embed_shortcut = kwargs.get("use_embed_shortcut", False)
+
+        if self.use_embed_shortcut:
+            self.lambdas = torch.nn.Parameter(torch.tensor([1.0, 0.0]))
+
+    def forward(self, x: torch.Tensor, v1: torch.Tensor | None = None, x0: torch.Tensor | None = None):
+        if self.use_embed_shortcut:
+            x = self.lambdas[0] * x + self.lambdas[1] * x0
+
+        attn_out, v_out = self.attn(self.ln1(x), self.rope, v1=v1)
+        x = x + attn_out
         x = x + self.ffn(self.ln2(x))
-        return x
+        return x, v_out
 
 
 class Embedding(torch.nn.Module):
@@ -279,6 +317,8 @@ class Transformer(torch.nn.Module):
             [Block(d_model, num_heads, d_ff, rope, device, dtype, **kwargs) for _ in range(num_layers)]
         )
 
+        self.ln_embed = RMSNorm(d_model, device=device, dtype=dtype) if kwargs.get("ln_after_embed", False) else None
+
         self.ln_final = RMSNorm(d_model, device=device, dtype=dtype)
 
         # Only accept the tied_weights_std if weight tying is enabled
@@ -295,6 +335,8 @@ class Transformer(torch.nn.Module):
         elif kwargs.get("zero_init_lm_head", False):
             self.lm_head.weight.data.zero_()
 
+        self.clamp_logits_value = kwargs.get("clamp_logits_value", False)
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         batch_size, seq_len = x.shape
 
@@ -303,10 +345,19 @@ class Transformer(torch.nn.Module):
 
         x = self.token_embeddings(x)
 
+        if self.ln_embed is not None:
+            x = self.ln_embed(x)
+
+        v1 = None
+        x0 = x
+
         for layer in self.layers:
-            x = layer(x)
+            x, v1 = layer(x, v1=v1, x0=x0)
 
         x = self.ln_final(x)
         x = self.lm_head(x)
+
+        if self.clamp_logits_value:
+            x = self.clamp_logits_value * torch.tanh(x / self.clamp_logits_value)
 
         return x

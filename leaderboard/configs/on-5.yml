@@ -1,12 +1,38 @@
 model:
   d_model: 1280
-  d_ff: 3456
-  num_heads: 16
+  d_ff: 5120
+  num_heads: 10
   num_layers: 12
+  ln_after_embed: true
+  ffn_type: "relu2"
+  clamp_logits_value: 20
+  use_value_residual: true # RISKY TEST
+  use_embed_shortcut: true
+  
+optimizer:
+  name: "muon"
+  weight_decay: 0.01
+  momentum: 0.95
+  # momentum_start: 0.85
+  # momentum_warmup_steps: 250
+  nesterov: true
+  ns_steps: 5
+  adamw_betas: [0.9, 0.95]
+  adamw_eps: 1.0e-8
 
 training:
-  max_steps: 15_000
+  max_steps: 12_100
+  
+  # Save a checkpoint before messing with LR schedule
+  checkpoint_interval: 11_500
+  eval_interval: 100
+  eval_steps: 1
 
-  lr_schedule: "linear"
-  lr_max: 5.0e-4
-  lr_min: 1.0e-4
+  # LR schedule with custom scheduler
+  lr_max: 1.6e-3
+  warmup_ratio: 0
+  warmup_iters: False # or warmup_ratio
+  lr_decay_schedule:
+    - until_iter: 12_100
+      to_lr: 0
+      type: "linear"

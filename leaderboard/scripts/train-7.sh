@@ -9,4 +9,4 @@
 #SBATCH --error=train_leaderboard_%j.err
 
 uv run -m leaderboard.train \
-		--config leaderboard/configs/on-6.yml
+		--config leaderboard/configs/on-7.yml

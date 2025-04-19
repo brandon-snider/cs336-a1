@@ -1,3 +1,4 @@
+import math
 import torch
 from torch import Tensor
 
@@ -35,61 +36,153 @@ class Muon(torch.optim.Optimizer):
     """
     Muon - MomentUm Orthogonalized by Newton-schulz
 
-    https://kellerjordan.github.io/posts/muon/
-
-    Muon internally runs standard SGD-momentum, and then performs an orthogonalization post-
-    processing step, in which each 2D parameter's update is replaced with the nearest orthogonal
-    matrix. To efficiently orthogonalize each update, we use a Newton-Schulz iteration, which has
-    the advantage that it can be stably run in bfloat16 on the GPU.
-
-    Some warnings:
-    - This optimizer should not be used for the embedding layer, the final fully connected layer,
-      or any {0,1}-D parameters; those should all be optimized by a standard method (e.g., AdamW).
-    - To use it with 4D convolutional filters, it works well to just flatten their last 3 dimensions.
-
     Arguments:
-        lr: The learning rate used by the internal SGD.
-        momentum: The momentum used by the internal SGD.
-        nesterov: Whether to use Nesterov-style momentum in the internal SGD. (recommended)
-        ns_steps: The number of Newton-Schulz iteration steps to use.
+        muon_params: params to be optimized by Muon.
+        lr: updates will have spectral norm of `lr`
+        momentum: momentum used by the internal SGD
+        nesterov: whether to use Nesterov-style momentum in the internal SGD
+        ns_steps: number of Newton-Schulz iterations to run (6 is probably always enough)
+        adamw_params: params to be optimized by AdamW.
+            - Note: `muon_params` which are <2D or are embed or lm_head will also go to AdamW
+        adamw_lr: LR for internal AdamW.
+        adamw_betas: betas for internal AdamW.
+        adamw_eps: eps for internal AdamW.
+        adamw_wd: wd for internal AdamW.
     """
 
-    def __init__(self, params, lr=0.02, momentum=0.95, nesterov=True, ns_steps=5):
-        defaults = dict(lr=lr, momentum=momentum, nesterov=nesterov, ns_steps=ns_steps)
+    def __init__(
+        self,
+        muon_params=None,
+        adamw_params=None,
+        lr=1e-3,
+        weight_decay=0.1,
+        momentum=0.95,
+        nesterov=True,
+        ns_steps=5,
+        adamw_betas=(0.9, 0.95),
+        adamw_eps=1e-8,
+        momentum_start=0.85,
+        momentum_warmup_steps=500,
+        **kwargs,
+    ):
+        defaults = dict(
+            lr=lr,
+            wd=weight_decay,
+            momentum=momentum,
+            nesterov=nesterov,
+            ns_steps=ns_steps,
+            adamw_betas=adamw_betas,
+            adamw_eps=adamw_eps,
+        )
+
+        params = list(muon_params)
+        adamw_params = list(adamw_params) if adamw_params is not None else []
+        params.extend(adamw_params)
+
         super().__init__(params, defaults)
 
-    @torch.no_grad()
-    def step(self):
+        self.it = 0
+        self.momentum_start = momentum_start
+        self.momentum_warmup_steps = momentum_warmup_steps
+
+        for p in muon_params:
+            assert p.ndim == 2, p.ndim
+            self.state[p]["use_muon"] = True
+        for p in adamw_params:
+            self.state[p]["use_muon"] = False
+            self.state[p]["use_wd"] = p.ndim >= 2
+
+    def adjust_lr_for_muon(self, lr, param_shape):
+        A, B = param_shape[:2]
+
+        # Adjust LR and WD based on the size of the parameter matrix
+        # https://arxiv.org/abs/2502.16982
+        adjusted_ratio = 0.2 * math.sqrt(max(A, B))
+        adjusted_lr = lr * adjusted_ratio
+        return adjusted_lr
+
+    def get_adjusted_momentum(self, momentum):
+        """Momentum warmup"""
+        if self.it < self.momentum_warmup_steps:
+            return self.momentum_start + self.it / self.momentum_warmup_steps * (momentum - self.momentum_start)
+
+        return momentum
+
+    def step(self, closure=None):
+        loss = None
+        if closure is not None:
+            with torch.enable_grad():
+                loss = closure()
+
         for group in self.param_groups:
+            # Muon update
+
+            params = [p for p in group["params"] if self.state[p]["use_muon"]]
             lr = group["lr"]
-            momentum = group["momentum"]
-            nesterov = group["nesterov"]
-            ns_steps = group["ns_steps"]
+            wd = group["wd"]
+            momentum = self.get_adjusted_momentum(group["momentum"])
 
-            for p in group["params"]:
-                if p.grad is None:
-                    continue
+            for p in params:
                 g = p.grad
+                if g is None:
+                    continue
+                if g.ndim > 2:
+                    g = g.view(g.size(0), -1)
+                assert g is not None
 
-                # Momentum buffer
                 state = self.state[p]
                 if "momentum_buffer" not in state:
                     state["momentum_buffer"] = torch.zeros_like(g)
                 buf = state["momentum_buffer"]
-
-                # Standard SGD momentum
-                buf.lerp_(g, 1 - momentum)
-
-                # Apply Nesterov if specified
-                if nesterov:
-                    g = g.lerp_(buf, momentum)
+                buf.mul_(momentum).add_(g)
+                if group["nesterov"]:
+                    g = g.add(buf, alpha=momentum)
                 else:
                     g = buf
+                u = zeropower_via_newtonschulz5(g, steps=group["ns_steps"])
 
-                # Orthogonalize via Newton–Schulz
-                g = zeropower_via_newtonschulz5(g, steps=ns_steps).flatten()
+                adjusted_lr = self.adjust_lr_for_muon(lr, p.shape)
+                p.data.mul_(1 - lr * wd)
+                p.data.add_(u, alpha=-adjusted_lr)
 
-                # Scale the parameter update (only valid for >= 2D shapes)
-                # The doc warns not to use Muon for 0D or 1D, so we assume p.ndim >= 2:
-                alpha_scale = max(1, p.size(-2) / p.size(-1)) ** 0.5
-                p.add_(g.view_as(p), alpha=-lr * alpha_scale)
+            # AdamW update
+
+            params = [p for p in group["params"] if not self.state[p]["use_muon"]]
+            lr = group["lr"]
+            beta1, beta2 = group["adamw_betas"]
+            eps = group["adamw_eps"]
+            weight_decay = group["wd"]
+
+            for p in params:
+                g = p.grad
+                if g is None:
+                    continue
+
+                state = self.state[p]
+
+                if "step" not in state:
+                    state["step"] = 0
+                    state["moment1"] = torch.zeros_like(g)
+                    state["moment2"] = torch.zeros_like(g)
+
+                state["step"] += 1
+                step = state["step"]
+                buf1 = state["moment1"]
+                buf2 = state["moment2"]
+                buf1.lerp_(g, 1 - beta1)
+                buf2.lerp_(g.square(), 1 - beta2)
+
+                g = buf1 / (eps + buf2.sqrt())
+
+                bias_correction1 = 1 - beta1**step
+                bias_correction2 = 1 - beta2**step
+                scale = bias_correction1 / bias_correction2**0.5
+
+                if self.state[p]["use_wd"]:
+                    p.data.mul_(1 - lr * weight_decay)
+
+                p.data.add_(g, alpha=-lr / scale)
+
+        self.it += 1
+
+        return loss

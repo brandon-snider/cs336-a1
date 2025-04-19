@@ -227,7 +227,7 @@ def train(config: Config | None = None):
     lr_min = config.training.lr_min
     warmup_ratio = config.training.warmup_ratio
     warmup_iters = config.training.warmup_iters
-    exp_decay_iters = config.training.exp_decay_iters
+    phase_one_iters = config.training.phase_one_iters
     phase_two_iters = config.training.phase_two_iters
     phase_two_type = config.training.phase_two_type
     cosine_cycle_iters = config.training.cosine_cycle_iters
@@ -321,7 +321,7 @@ def train(config: Config | None = None):
             lr = lr_cosine_schedule(step, lr_max, lr_min, warmup_iters, cosine_cycle_iters)
         elif config.training.lr_schedule == "double":
             lr = lr_double_schedule(
-                step, lr_max, lr_inter, lr_min, warmup_iters, exp_decay_iters, phase_two_iters, phase_two_type
+                step, lr_max, lr_inter, lr_min, warmup_iters, phase_one_iters, phase_two_iters, phase_two_type
             )
 
         for param_group in optimizer.param_groups:

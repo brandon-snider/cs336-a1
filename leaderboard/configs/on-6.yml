@@ -1,12 +1,36 @@
+# FINAL RUN CONFIG
+
 model:
-  d_model: 1536
-  d_ff: 6144
-  num_heads: 24
-  num_layers: 4
+  d_model: 1280
+  d_ff: 5120
+  num_heads: 10
+  num_layers: 12
+  ln_after_embed: true
+  ffn_type: "relu2"
+  clamp_logits_value: 20
+  use_value_residual: true
+  use_embed_shortcut: true
+  
+optimizer:
+  name: "muon"
+  weight_decay: 0.01
+  momentum: 0.95
+  nesterov: true
+  ns_steps: 5
+  adamw_betas: [0.9, 0.95]
+  adamw_eps: 1.0e-8
 
 training:
-  max_steps: 22_000
+  max_steps: 12_200
+  checkpoint_interval: 6000
+  eval_interval: 100
+  eval_steps: 1
 
-  lr_schedule: "linear"
-  lr_max: 5.0e-4
-  lr_min: 5.0e-5
+  # LR schedule that uses custom dictionary-based scheduler
+  lr_max: 1.7e-3
+  warmup_ratio: 0 # or warmup_iters
+  warmup_iters: False # or warmup_ratio
+  lr_decay_schedule:
+    - until_iter: 12_200
+      to_lr: 0
+      type: "linear"

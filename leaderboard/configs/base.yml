@@ -1,9 +1,8 @@
-# - Run training with `python -m cs336_basics.train --config default.yml`
-# - Run from project root (paths are relative to `cwd`)
+# - Train: `uv run -m leaderboard.train --config leaderboard/configs/base.yml`
 # - Will always eval and save checkpoint at the end of training
 
 run:
-  run_id: "l-run-<timestamp>"
+  run_id: "<optimizer>-lr<lr_max>-d<d_model>f_<d_ff>_h<num_heads>_l<num_layers>-<max_steps>-<timestamp>"
   out_dir: "/data/c-sniderb/runs"
   # wandb_project: false
   wandb_project: "cs336-a1"
@@ -27,13 +26,18 @@ model:
   num_heads: 16
   num_layers: 12
   vocab_size: 32_000
-  context_length: 512
   rope_theta: 10_000
   ffn_type: "swiglu"
+  context_length: 512
+  ln_after_embed: true
+  clamp_logits_value: 15
+  use_value_residual: false
 
   zero_init_attn_out: true
   zero_init_ffn_out: true
-  zero_init_lm_head: false
+  # zero_init_lm_head: true
+
+  use_embed_shortcut: false
 
   # Use both or neither
   tie_weights: true
@@ -41,58 +45,60 @@ model:
 
 
 optimizer:
-  lr: 1.0e-3
-  betas: [0.9, 0.95]
-  eps: 1.0e-8
-  weight_decay: 0.01
+  # Just to make sure keys are present (set name to "adamw" )
+  # - To use AdammW, set `name: "adamw"` and set betas and eps in an inheriting config
+  betas: False
+  eps: False
 
-# (batch_size * max_steps * context_length) ~= 327,680,000 (327.68M)
-# e.g. 32 * 40_000 * 256 = 327,680,000
-# e.g. 64 * 20_000 * 256 = 327,680,000
-# e.g. 128 * 10_000 * 256 = 327,680,000
+  # Example AdamW config
+  name: "muon" # "adamw", "muon"
+  weight_decay: 0.01
+  momentum_start: 0.95
+  momentum: 0.95
+  momentum_warmup_steps: 0
+  nesterov: true
+  ns_steps: 5
+  adamw_betas: [0.9, 0.95]
+  adamw_eps: 1.0e-8
+  use_adamw_groups: false
 
 training:
   grad_accum_steps: 1
   batch_size: 128
-  max_steps: 16_000
-  eval_before_training: false
-  eval_interval: 200
-  eval_steps: 2
+  max_steps: 12_000
+  eval_before_training: true
+  eval_interval: 100
+  eval_steps: 10 # Only used <500 steps from end (1 until then)
   eval_batch_size: 128
-  checkpoint_interval: 15_000
+  checkpoint_interval: 10_000
   max_l2_norm: 1.0
 
-  # Cosine LR schedule
-  lr_schedule: "linear" # "cosine", "linear", "double"
-  lr_max: 5.0e-4
-  lr_min: 1.0e-4
-  warmup_ratio: 0.01 # Only used if `warmup_iters` is not set
-  # cosine_cycle_iters: 16_000
+  # Optionally use AdamW optimizer groups (with Muon for hidden params)
+  # - Note: should unset `tie_weights` if using this
+  lr_embed: 1.6e-2
+  lr_lm_head: 1.6e-4
+  lr_scalar: 1.6e-3
 
-  # Only used with other LR schedules
-  lr_inter: False # unused with cosine schedule
-  warmup_iters: False # overrides `warmup_ratio` if set in inheriting config
-  cosine_cycle_iters: False
-  linear_cycle_iters: False
-  exp_decay_iters: False
-  phase_two_iters: False
-  phase_two_type: "linear"
+  # Usage of LR scheduler (lr_max applies to Muon if `use_adamw_groups` is true):
+  lr_max: 1.6e-3
+  warmup_ratio: 0
+  warmup_iters: False # or warmup_ratio
+  lr_decay_schedule:
+    - until_iter: 11_300
+      to_lr: 1.6e-4
+      type: "linear"
+    - until_iter: 12_000
+      to_lr: 0
+      type: "linear"
 
-  # Example of how to configure Linear LR schedule
-  # lr_schedule: "linear"
-  # lr_max: 5.0e-4
-  # lr_min: 1.8e-4
-  # warmup_ratio: 0.03
-  # linear_cycle_iters: 13_000
+  # Optionally define custom sequence length schedule
+  seq_len_min: 512
+  seq_len_schedule:
+    - until_iter: 1_000_000
+      to_seq_len: 512
 
-  # Example of how to configure Double LR schedule
-  # lr_schedule: "double"
-  # lr_max: 1.5e-3
-  # lr_inter: 6.0e-4
-  # lr_min: 2.0e-4
-  # warmup_iters: 200
-  # exp_decay_iters: 1_500 # iter at which to hit lr_inter
-  # phase_two_iters: 13_000 # iter at which to hit lr_min
-  # phase_two_type: "linear"
-
-  # device: "cuda:7" # prefer setting device in command line
+  # Optionally define custom batch size schedule
+  batch_size_max: 128
+  batch_size_schedule:
+    - until_iter: 1_000_000
+      to_batch_size: 128
