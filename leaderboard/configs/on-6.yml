@@ -24,7 +24,7 @@ training:
   max_steps: 12_200
   checkpoint_interval: 6000
   eval_interval: 100
-  eval_steps: 10
+  eval_steps: 30
 
   # LR schedule that uses custom dictionary-based scheduler
   lr_max: 1.6e-3
