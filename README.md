@@ -50,8 +50,8 @@ cd ..
 
 ## Leaderboard run
 
-- Training script: `leaderboard/train.py`.
-- Model: `leaderboard/model.py`.
+- Training script: `leaderboard/train.py`
+- Model: `leaderboard/model.py`
 - Config: `leaderboard/configs/on-6.yml` (inherits from `leaderboard/configs/base.yml`)
 - Slurm script: `leaderboard/scripts/train-6.sh`
 
