@@ -70,7 +70,9 @@ uv run -m leaderboard.train --config leaderboard/configs/on-6.yml
 Overriding the number of eval steps can be done in the config file, or directly in the command line:
 
 ```sh
-uv run -m leaderboard.train --config leaderboard/configs/on-6.yml --override-param training.eval_steps=100
+uv run -m leaderboard.train \
+	--config leaderboard/configs/on-6.yml \
+	--override-param training.eval_steps=100
 ```
 
 Notes:
