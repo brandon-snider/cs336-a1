@@ -5,10 +5,10 @@ model:
   num_layers: 15
   ln_after_embed: true
   ffn_type: "relu2"
-  clamp_logits_value: 20
+  clamp_logits_value: 30
   use_value_residual: true
   use_embed_shortcut: true
-  
+
 optimizer:
   name: "muon"
   weight_decay: 0.01
@@ -22,7 +22,7 @@ optimizer:
 
 training:
   max_steps: 16_000
-  
+
   # Save a checkpoint before messing with LR schedule
   checkpoint_interval: 20000
   eval_interval: 100

@@ -6,7 +6,7 @@ run:
   out_dir: "/data/c-sniderb/runs"
   # wandb_project: false
   wandb_project: "cs336-a1"
-  wandb_tags: ["owt","leaderboard"]
+  wandb_tags: ["owt", "leaderboard"]
 
 data:
   train_data_path: "/data/c-sniderb/tokens/owt-train/tokens.bin"
@@ -30,7 +30,7 @@ model:
   ffn_type: "relu2"
   context_length: 512
   ln_after_embed: true
-  clamp_logits_value: 20
+  clamp_logits_value: 30
 
   zero_init_attn_out: true
   zero_init_ffn_out: true
@@ -42,7 +42,6 @@ model:
   # Use both or neither
   tie_weights: true
   tied_weights_std: 0.02
-
 
 optimizer:
   # Just to make sure keys are present (set name to "adamw" )
