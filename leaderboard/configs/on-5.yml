@@ -1,12 +1,12 @@
 model:
-  d_model: 1280
-  d_ff: 5120
-  num_heads: 10
-  num_layers: 12
+  d_model: 1024
+  d_ff: 4096
+  num_heads: 8
+  num_layers: 15
   ln_after_embed: true
   ffn_type: "relu2"
   clamp_logits_value: 20
-  use_value_residual: true # RISKY TEST
+  use_value_residual: true
   use_embed_shortcut: true
   
 optimizer:
@@ -21,10 +21,10 @@ optimizer:
   adamw_eps: 1.0e-8
 
 training:
-  max_steps: 12_100
+  max_steps: 16_000
   
   # Save a checkpoint before messing with LR schedule
-  checkpoint_interval: 11_500
+  checkpoint_interval: 20000
   eval_interval: 100
   eval_steps: 1
 
@@ -33,6 +33,6 @@ training:
   warmup_ratio: 0
   warmup_iters: False # or warmup_ratio
   lr_decay_schedule:
-    - until_iter: 12_100
+    - until_iter: 16_000
       to_lr: 0
       type: "linear"

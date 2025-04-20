@@ -8,5 +8,5 @@
 #SBATCH --output=train_leaderboard_%j.out
 #SBATCH --error=train_leaderboard_%j.err
 
-uv run -m leaderboard.train \
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True uv run -m leaderboard.train \
 		--config leaderboard/configs/on-5.yml
