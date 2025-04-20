@@ -108,6 +108,7 @@ class Muon(torch.optim.Optimizer):
 
         return momentum
 
+    @torch.no_grad()
     def step(self, closure=None):
         loss = None
         if closure is not None:

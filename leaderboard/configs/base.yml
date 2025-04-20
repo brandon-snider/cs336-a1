@@ -22,22 +22,22 @@ data:
 
 model:
   d_model: 1280
-  d_ff: 3456
-  num_heads: 16
+  d_ff: 5120
+  num_heads: 8
   num_layers: 12
   vocab_size: 32_000
   rope_theta: 10_000
-  ffn_type: "swiglu"
+  ffn_type: "relu2"
   context_length: 512
   ln_after_embed: true
-  clamp_logits_value: 15
-  use_value_residual: false
+  clamp_logits_value: 20
 
   zero_init_attn_out: true
   zero_init_ffn_out: true
   # zero_init_lm_head: true
 
-  use_embed_shortcut: false
+  use_value_residual: true
+  use_embed_shortcut: true
 
   # Use both or neither
   tie_weights: true
@@ -65,10 +65,10 @@ optimizer:
 training:
   grad_accum_steps: 1
   batch_size: 128
-  max_steps: 12_000
+  max_steps: 14_300
   eval_before_training: true
   eval_interval: 100
-  eval_steps: 10 # Only used <500 steps from end (1 until then)
+  eval_steps: 20 # Only used <500 steps from end (1 until then)
   eval_batch_size: 128
   checkpoint_interval: 10_000
   max_l2_norm: 1.0
@@ -84,10 +84,7 @@ training:
   warmup_ratio: 0
   warmup_iters: False # or warmup_ratio
   lr_decay_schedule:
-    - until_iter: 11_300
-      to_lr: 1.6e-4
-      type: "linear"
-    - until_iter: 12_000
+    - until_iter: 14_300
       to_lr: 0
       type: "linear"
 

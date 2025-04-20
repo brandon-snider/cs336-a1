@@ -2,6 +2,7 @@ from collections.abc import Iterable
 import torch
 
 
+@torch.compile
 def gradient_clip(parameters: Iterable[torch.nn.Parameter], max_l2_norm: float):
     grads = [p.grad for p in parameters if p.grad is not None]
 

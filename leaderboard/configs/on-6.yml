@@ -3,7 +3,7 @@
 model:
   d_model: 1280
   d_ff: 5120
-  num_heads: 10
+  num_heads: 8
   num_layers: 12
   ln_after_embed: true
   ffn_type: "relu2"
@@ -21,7 +21,7 @@ optimizer:
   adamw_eps: 1.0e-8
 
 training:
-  max_steps: 12_200
+  max_steps: 14_300
   checkpoint_interval: 6000
   eval_interval: 100
   eval_steps: 30
@@ -31,6 +31,6 @@ training:
   warmup_ratio: 0 # or warmup_iters
   warmup_iters: False # or warmup_ratio
   lr_decay_schedule:
-    - until_iter: 12_200
+    - until_iter: 14_300
       to_lr: 0
       type: "linear"

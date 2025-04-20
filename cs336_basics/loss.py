@@ -23,6 +23,7 @@ def cross_entropy_loss_naive(logits: torch.Tensor, targets: torch.Tensor) -> tor
     return -target_log_probs.mean()
 
 
+@torch.compile
 def cross_entropy_loss(logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
     max_vals, _ = logits.max(dim=-1, keepdim=True)
     target_logits = logits.gather(dim=-1, index=targets.unsqueeze(-1))
