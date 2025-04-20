@@ -5,7 +5,7 @@ model:
   num_layers: 15
   ln_after_embed: true
   ffn_type: "relu2"
-  clamp_logits_value: 30
+  clamp_logits_value: 20
   use_value_residual: true
   use_embed_shortcut: true
 
