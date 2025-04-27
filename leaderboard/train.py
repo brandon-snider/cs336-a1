@@ -228,8 +228,12 @@ def train(config: Config | None = None):
     device = config.device
     dtype = getattr(torch, config.dtype.split(".")[-1])  # Convert string back to torch dtype
 
-    train_data = np.memmap(config.data.train_data_path, dtype=np.uint16, mode="r")
-    valid_data = np.memmap(config.data.valid_data_path, dtype=np.uint16, mode="r")
+    if config.data.train_data_path.endswith(".npy"):
+        train_data = np.load(config.data.train_data_path)
+        valid_data = np.load(config.data.valid_data_path)
+    else:
+        train_data = np.memmap(config.data.train_data_path, dtype=np.uint16, mode="r")
+        valid_data = np.memmap(config.data.valid_data_path, dtype=np.uint16, mode="r")
 
     # Initialize model
     model = Transformer(**config.model, device=device, dtype=dtype)
